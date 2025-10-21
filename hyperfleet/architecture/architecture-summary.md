@@ -19,7 +19,7 @@ HyperFleet v2 represents a significant architectural simplification from v1, rem
 | **Message Publishing** | Outbox Reconciler polls and publishes | Sentinel publishes directly |
 | **API Complexity** | Transactional writes + outbox management | Simple CRUD operations |
 | **Components** | API + Database + Outbox Reconciler + Broker + Sentinel + Adapters | API + Database + Sentinel + Broker + Adapters |
-| **Latency** | Higher (outbox polling delay) | Lower (direct publish) |
+| **Latency** | Lower (outbox polling delay) | Higher (Sentinel query/process N clusters) |
 
 **Result**: Removed 1 component (Outbox Reconciler), simplified 2 components (API, Sentinel), reduced operational complexity.
 
@@ -76,7 +76,9 @@ graph TB
 
 ### 1. HyperFleet API
 
-**What**: Simple REST API providing CRUD operations for HyperFleet resources (clusters, node pools, etc.) and their statuses.
+**What**: Simple REST API providing:
+- CRUD operations for HyperFleet resources (clusters, node pools, etc.) and their statuses.
+- Computed cluster state/phase
 
 **Why**:
 - **Simplicity**: No business logic, just data persistence
@@ -88,6 +90,8 @@ graph TB
 - Accept cluster creation/update/delete requests
 - Persist cluster data to PostgreSQL database
 - Accept status updates from adapters (via POST /clusters/{id}/statuses)
+- Serve cluster  data to adapters(via GET /clusters)
+- Serve statuses data to adapters(via GET /clusters/{id}/statuses)
 - Serve cluster data to Sentinel Operator (via GET /clusters)
 - No event creation, no outbox pattern, no business logic
 
@@ -132,6 +136,7 @@ clusters
   - id (uuid, primary key)
   - name (string)
   - spec (jsonb) - cluster configuration
+  - custom-spec (jsonb) - provider specific configuration 
   - status (jsonb) - aggregated status with phase and lastTransitionTime
   - labels (jsonb) - for sharding and filtering
   - created_at (timestamp)
@@ -149,14 +154,14 @@ statuses
 
 **Key Design Decisions**:
 - `clusters.status.lastTransitionTime` updated whenever ANY adapter posts status
-- Status history preserved in `statuses` table for debugging
+- Status history preserved in `statuses_history` table for debugging
 - Labels stored as JSONB for flexible querying by Sentinel shards
 
 ---
 
-### 3. Sentinel Operator
+### 3. Sentinel Service
 
-**What**: Kubernetes Operator that continuously polls HyperFleet API, decides when resources need reconciliation, creates events, and publishes them to the message broker.
+**What**: Service that continuously polls HyperFleet API, decides when resources need reconciliation, creates events, and publishes them to the message broker.
 
 **Why**:
 - **Centralized Orchestration Logic**: Single component decides "when" to reconcile
@@ -171,9 +176,8 @@ statuses
    - `status.phase` (Ready vs Not Ready)
    - `status.lastTransitionTime` (time since last adapter update)
    - Configured backoff intervals (10s for not-ready, 30m for ready)
-3. **Event Creation**: Create reconciliation event with resource context
-4. **Event Publishing**: Publish event to configured message broker
-5. **Metrics & Observability**: Expose Prometheus metrics for monitoring
+3. **Event Publishing**: Publish event to configured message broker
+4. **Metrics & Observability**: Expose Prometheus metrics for monitoring
 
 **Configuration** (via SentinelConfig CRD):
 ```yaml
@@ -224,7 +228,6 @@ FOR EACH resource in FetchResources(resourceType, shardSelector):
 - **Decoupling**: Sentinel and Adapters don't know about each other
 - **Fan-out Pattern**: Single event triggers multiple adapters
 - **Scalability**: Adapters can scale independently
-- **Reliability**: Message delivery guarantees (at-least-once)
 - **Flexibility**: Support multiple broker implementations
 
 **Supported Implementations**:
@@ -262,7 +265,6 @@ Subscriptions:
 ```
 
 **Benefits**:
-- Adapters receive only relevant events
 - Easy to add new adapters (just add subscription)
 - Broker handles retry and dead-letter queues
 - Message ordering within subscription (if needed)
@@ -289,10 +291,11 @@ Subscriptions:
 **Adapter Workflow**:
 ```
 1. Consume event from broker subscription
-2. Fetch cluster details from API: GET /clusters/{id}
+2. Fetch cluster and statuses details from API: GET /clusters/{id}, GET /clusters/{id}/statuses
 3. Evaluate preconditions:
    - Check adapter-specific requirements
    - Check dependencies (e.g., DNS requires Validation complete)
+   - Evaluate generation of event (discard for old generation)
 4. IF preconditions met:
      - Create Kubernetes Job with cluster context
      - Job executes adapter logic (e.g., call cloud provider APIs)
@@ -406,6 +409,9 @@ spec:
 - Job logs available via kubectl/UI
 - Jobs can run to completion without blocking adapter pod
 
+Downside:
+- Keep large amount of finished jobs to maintain their status
+
 ---
 
 ## Data Flow
@@ -445,18 +451,17 @@ sequenceDiagram
     API->>DB: SELECT cluster WHERE id = ...
     DB-->>API: cluster data
     API-->>Adapter: {id, spec, status}
-
     Note over Adapter: Evaluate preconditions:<br/>IF met, create Job
-
-    Adapter->>Job: Create Kubernetes Job
-    Job->>Job: Execute validation logic
-    Job-->>Adapter: Job Complete
-
-    Adapter->>API: POST /clusters/cls-123/statuses<br/>{adapter: "validation",<br/>phase: "Complete"}
-    API->>DB: INSERT INTO statuses<br/>UPDATE clusters.status.lastTransitionTime = now()
-    DB-->>API: status saved
-    API-->>Adapter: 201 Created
-
+    alt new job needed
+        Adapter->>Job: Create Kubernetes Job
+        Job-->>Adapter: Job Created
+        Job->>Job: Execute validation logic
+    else job exists
+        Adapter->>API: POST /clusters/cls-123/statuses<br/>{adapter: "validation",<br/>phase: "Complete"}
+        API->>DB: INSERT INTO statuses<br/>UPDATE clusters.status.lastTransitionTime = now()
+        DB-->>API: status saved
+        API-->>Adapter: 201 Created
+    end
     Note over Sentinel: Next poll cycle (10s later)
 
     Sentinel->>API: GET /clusters
@@ -541,11 +546,11 @@ sequenceDiagram
 - Better separation of concerns
 
 ### What We Lose
-- **Exactly-once semantics**: Outbox Pattern provided guaranteed event delivery. v2 uses at-least-once (broker semantics).
+- At-least-once semantics**: Outbox Pattern provided guaranteed event delivery. v2 uses at-most-once (broker semantics).
 - **Transactional coupling**: API write + event creation was atomic in v1. v2 has eventual consistency (Sentinel polls periodically).
 
 ### Why Trade-offs Are Acceptable
-- **At-least-once is sufficient**: Adapters are idempotent (can process same event multiple times safely)
+- **At-most-once is sufficient**: Sentinel will retry
 - **Eventual consistency is acceptable**: 5-10 second polling delay is acceptable for cluster provisioning use case
 - **Simpler system is more maintainable**: Reduced complexity outweighs strict consistency guarantees
 
