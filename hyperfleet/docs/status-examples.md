@@ -9,7 +9,19 @@ This document provides concrete examples for implementing the generic adapter SD
 4. [Kubernetes Job Sub-Conditions](#kubernetes-job-sub-conditions)
 5. [Status Payloads to HyperFleet API](#status-payloads-to-hyperfleet-api)
 
+
+How these concepts play together:
+```mermaid
+sequenceDiagram
+    config->>adaptor: (1) config to instantiate
+    adaptor->>k8s job: (2) pre-condition
+    note right of k8s job: (4) k8s job<br>sub-conditions
+    k8s job->>adaptor: (3) post-condition
+    adaptor->>CLM API: (5) report status
+
+```
 ---
+
 
 ## AdapterConfig Examples
 
@@ -35,14 +47,26 @@ metadata:
 
   # These come from reading the k8s jobs status field
   postconditions:
-    applied:
-      - field: status.conditions[?(@.type=='Complete')].status
-        operator: exists
-      - field: status.conditions[?(@.type=='Failed')].status
-        operator: exists
+    Applied:
+      status:
+        - field: status.conditions[?(@.type=='Complete')].status
+          operator: exists
+        - field: status.conditions[?(@.type=='Failed')].status
+          operator: exists
+      reason:
+        - field: status.conditions[?(@.type=='Complete')].status
+          operator: exists
+        - field: status.conditions[?(@.type=='Failed')].status
+          operator: exists
+      message:
+        - field: status.conditions[?(@.type=='Complete')].status
+          operator: exists
+        - field: status.conditions[?(@.type=='Failed')].status
+          operator: exists
 
     # Available is true when all validation checks pass
-    available:
+    Available:
+      status:
       - field: status.conditions[?(@.type=='ValidationComplete')].status
         operator: eq
         value: "True"
@@ -52,10 +76,12 @@ metadata:
       - field: status.succeeded
         operator: greaterThanOrEqual
         value: 1
+      reason: status.conditions[?(@.type=='ValidationComplete')].reason
+      message: status.conditions[?(@.type=='ValidationComplete')].message
 
     # Health is false on unexpected errors
-    health:
-      failure:
+    Health:
+      status:
         - field: status.conditions[?(@.type=='JobError')].status
           operator: eq
           value: "True"
@@ -97,13 +123,15 @@ metadata:
 
 
   postconditions:
-    applied:
+    Applied:
+      status:
       - field: status.conditions[?(@.type=='Complete')].status
         operator: exists
       - field: status.conditions[?(@.type=='Failed')].status
         operator: exists
 
-    available:
+    Available:
+      status:
       # All DNS records must be created
       - field: status.conditions[?(@.type=='APIRecordCreated')].status
         operator: eq
@@ -126,6 +154,8 @@ metadata:
         - field: status.failed
           operator: greaterThanOrEqual
           value: 3
+    recordCreated:
+      - field: value
 
 ```
 </details>
@@ -219,6 +249,14 @@ The adapter SDK's **rule engine**:
 
 ### Example Cluster Object from HyperFleet API and statuses
 
+Things to note:
+- Cluster object contains
+  - status: as the aggregate of all statueses/available conditions
+  - statuses: array of individual "available" condition per adapter
+- Statuses endpoint returns:
+  - available, applied, health: for ALL adapters
+  - some adapters (like the DNS), use conditions to report additional information `recordCreated`
+
 <details>
 <summary>Responses from CLM API</summary>
 
@@ -239,12 +277,9 @@ GET /cluster/123
     "images": [
       "quay.io/openshift/api:latest",
       "quay.io/openshift/controller:latest"
-    ]
-    //bla bla bla
-  }
-
-  GET /cluster/123/statuses
-     [
+    ],
+    status : ready,   <== aggregated status 
+    statuses: [
       {
         "name": "validation",
         "available": "True",
@@ -260,6 +295,29 @@ GET /cluster/123
         "available": "False",
         "observedGeneration": 1
       }
+    ]
+    //bla bla bla
+  }
+
+  // if the adapter requires more data from other adapters
+  // it has to fetch all statuses from the specific endpoint
+
+  GET /cluster/123/statuses
+     [
+      { "name": "validation", "available": "True", "observedGeneration": 2 },
+      { "name": "validation", "applied": "True", "observedGeneration": 2 },
+      { "name": "validation", "health": "True", "observedGeneration": 2 },
+
+
+      { "name": "dns", "available": "True", "observedGeneration": 2 },
+      { "name": "dns", "applied": "True", "observedGeneration": 2 },
+      { "name": "dns", "health": "True", "observedGeneration": 2 },
+      { "name": "dns", "recordCreated": "True", "observedGeneration": 2 , "message":"subdomain.domain.com"},
+
+
+      { "name": "pullimage", "available": "False", "observedGeneration": 1 },
+      { "name": "pullimage", "applied": "False", "observedGeneration": 1 },
+      { "name": "pullimage", "health": "False", "observedGeneration": 1 }
     ]
 ```
 </details>
@@ -417,7 +475,8 @@ Health = TRUE
 
 **Final Aggregated Conditions**:
 <details>
-<summary>payload to send to CLM</summary>
+<summary>payload to send to CLM from DNS</summary>
+
 
 ```json
 {
@@ -439,6 +498,12 @@ Health = TRUE
       "status": "True",
       "reason": "NoErrors",
       "message": "DNS adapter executed without errors"
+    },
+    {
+      "type": "RecordCreated",            <== this is a custom condition useful for other adapters
+      "status": "True",
+      "reason": "NoErrors",
+      "message": "subdomain.domain.com"
     }
   ]
 }
