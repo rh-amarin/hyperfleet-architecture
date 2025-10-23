@@ -29,6 +29,7 @@ sequenceDiagram
 
 The validator adapter has **no external dependencies** - it only checks if it hasn't already completed its work (self-referential check).
 
+
 <details>
 <summary>Validator config example</summary>
 
@@ -46,6 +47,14 @@ metadata:
       value: "True"
 
   # These come from reading the k8s jobs status field
+  # e.g. for status, the adapter will look if :
+  #     job.status==Complete then status=true
+  #     job.status==Failed then status=false
+  # reason is a bit arbitrary, reason for a job success? jobCompteted?
+  # message is an arbitrary string with more information
+  # messages are used to return specific information from the jobs to the CLM API
+  # e.g. in DNS adaptor, there can be one post-condition recordCreated, 
+  #      and the message contains the DNS c: subdomain.domain.com 
   postconditions:
     Applied:
       status:
