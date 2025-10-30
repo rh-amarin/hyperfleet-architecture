@@ -493,53 +493,6 @@ paths:
           description: The server cannot find the requested resource.
       tags:
         - NodePool statuses
-    patch:
-      operationId: NodePoolStatuses_patch_statuses
-      summary: Update adapter status
-      description: |-
-        Adapter updates its status object.
-        Service computes lastTransitionTime for conditions when status changes.
-        Service updates lastUpdated timestamp automatically.
-      parameters:
-        - name: cluster_id
-          in: path
-          required: true
-          description: Cluster ID
-          schema:
-            type: string
-            format: uuid
-        - name: nodepool_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: status_id
-          in: path
-          required: true
-          description: Status ID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: The request has succeeded.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdapterStatus'
-        '400':
-          description: The server could not understand the request due to invalid syntax.
-        '404':
-          description: The server cannot find the requested resource.
-      tags:
-        - NodePool statuses
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AdapterStatusUpdateRequest'
   /api/clusters/{cluster_id}/statuses/:
     get:
       operationId: ClusterStatuses_get_statuses
@@ -688,47 +641,6 @@ paths:
           description: The server cannot find the requested resource.
       tags:
         - Cluster statuses
-    patch:
-      operationId: ClusterStatuses_patch_statuses
-      summary: Update adapter status
-      description: |-
-        Adapter updates its status object.
-        Service computes lastTransitionTime for conditions when status changes.
-        Service updates lastUpdated timestamp automatically.
-      parameters:
-        - name: cluster_id
-          in: path
-          required: true
-          description: Cluster ID
-          schema:
-            type: string
-            format: uuid
-        - name: status_id
-          in: path
-          required: true
-          description: Status ID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: The request has succeeded.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AdapterStatus'
-        '400':
-          description: The server could not understand the request due to invalid syntax.
-        '404':
-          description: The server cannot find the requested resource.
-      tags:
-        - Cluster statuses
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AdapterStatusUpdateRequest'
 components:
   parameters:
     QueryParams.orderBy:
@@ -771,13 +683,13 @@ components:
         - id
         - kind
         - href
+        - created_at
+        - updated_at
         - labels
         - adapter_name
         - owner_references
         - observed_generation
         - conditions
-        - last_updated
-        - created_at
       properties:
         id:
           type: string
@@ -792,6 +704,12 @@ components:
         href:
           type: string
           description: Resource URI
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
         labels:
           type: object
           additionalProperties:
@@ -806,6 +724,8 @@ components:
             - id
             - kind
             - href
+            - created_at
+            - updated_at
             - labels
           properties:
             id:
@@ -821,6 +741,12 @@ components:
             href:
               type: string
               description: Resource URI
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
             labels:
               type: object
               additionalProperties:
@@ -857,14 +783,6 @@ components:
             duration:
               type: string
           description: Metadata about the adapter job/execution
-        last_updated:
-          type: string
-          format: date-time
-          description: When this status was last updated (computed by service)
-        created_at:
-          type: string
-          format: date-time
-          description: When adapter first created this status
     AdapterStatusCreateRequest:
       type: object
       required:
@@ -890,54 +808,19 @@ components:
           type: object
           additionalProperties: {}
           description: Job execution metadata
-    AdapterStatusUpdateRequest:
-      type: object
-      properties:
-        observed_generation:
-          type: integer
-          description: Update observed generation
-        conditions:
-          type: array
-          items:
-            type: object
-            properties:
-              type:
-                type: string
-              status:
-                type: string
-                enum:
-                  - 'True'
-                  - 'False'
-                  - Unknown
-              reason:
-                type: string
-              message:
-                type: string
-            required:
-              - type
-              - status
-          description: Update conditions (service computes lastTransitionTime)
-        data:
-          type: object
-          additionalProperties: {}
-          description: Update adapter-specific data
-        metadata:
-          type: object
-          additionalProperties: {}
-          description: Update job metadata
     Cluster:
       type: object
       required:
         - id
         - kind
         - href
+        - created_at
+        - updated_at
         - labels
         - name
         - spec
         - generation
         - status
-        - created_at
-        - updated_at
         - created_by
         - updated_by
       properties:
@@ -953,6 +836,12 @@ components:
         href:
           type: string
           description: Resource URI
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
         labels:
           type: object
           additionalProperties:
@@ -982,25 +871,37 @@ components:
                 - Failed
               description: |-
                 Current cluster phase (native database column).
-                Updated when adapters POST status. Used by Sentinel for queries.
+                Updated when adapters report status.
                 Note: status.phase provides aggregated view from all adapter conditions.
+            last_transition_time:
+              type: string
+              format: date-time
+              description: |-
+                When cluster last transitioned (updated by adapters, used by Sentinel for backoff)
+                Updated when adapters report status if the phase changes
             observed_generation:
               type: integer
               description: |-
                 Last generation processed by adapters
+                Updated when adapters report status.
                 This will be the lowest value of each adapter's observed_generation values
-            last_transition_time:
+                The phase value is based on this generation
+            updated_at:
               type: string
               format: date-time
-              description: When cluster last transitioned (updated by adapters, used by Sentinel for backoff)
+              description: |-
+                Time of the last complete report from adapters
+                Updated when adapters report status.
+                Oldest `updated_at` from the adapter conditions
             adapters:
               type: array
               items:
                 $ref: '#/components/schemas/ConditionAvailable'
           required:
             - phase
-            - observed_generation
             - last_transition_time
+            - observed_generation
+            - updated_at
             - adapters
           description: |-
             Cluster status aggregation from all adapters.
@@ -1009,12 +910,6 @@ components:
             It is aggregated from adapter status updates posted to `/clusters/{id}/statuses`.
 
             Provides quick overview of which adapters have reported and aggregated phase.
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
         created_by:
           type: string
         updated_by:
@@ -1025,6 +920,8 @@ components:
         - id
         - kind
         - href
+        - created_at
+        - updated_at
         - labels
         - name
         - spec
@@ -1041,6 +938,12 @@ components:
         href:
           type: string
           description: Resource URI
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
         labels:
           type: object
           additionalProperties:
@@ -1071,6 +974,12 @@ components:
         href:
           type: string
           description: Resource URI
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
         labels:
           type: object
           additionalProperties:
@@ -1094,6 +1003,7 @@ components:
         - status
         - observed_generation
         - created_at
+        - updated_at
       properties:
         adapter:
           type: string
@@ -1117,6 +1027,14 @@ components:
         created_at:
           type: string
           format: date-time
+          description: |-
+            Time when the condition was created 
+            - In an adapter reporting conditions `updated_at==created_at`
+            - In the API, `created_at` doesn't change with new updates from adapters
+        updated_at:
+          type: string
+          format: date-time
+          description: Time when the condition was updated
         last_transition_time:
           type: string
           format: date-time
@@ -1143,6 +1061,7 @@ components:
         - status
         - observed_generation
         - created_at
+        - updated_at
       properties:
         adapter:
           type: string
@@ -1166,6 +1085,14 @@ components:
         created_at:
           type: string
           format: date-time
+          description: |-
+            Time when the condition was created 
+            - In an adapter reporting conditions `updated_at==created_at`
+            - In the API, `created_at` doesn't change with new updates from adapters
+        updated_at:
+          type: string
+          format: date-time
+          description: Time when the condition was updated
       description: |-
         Common data for status objects, part of:
         - Status entity (stored in DB)
@@ -1176,6 +1103,8 @@ components:
         - id
         - kind
         - href
+        - created_at
+        - updated_at
         - labels
         - owner_references
         - name
@@ -1194,6 +1123,12 @@ components:
         href:
           type: string
           description: Resource URI
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
         labels:
           type: object
           additionalProperties:
@@ -1205,6 +1140,8 @@ components:
             - id
             - kind
             - href
+            - created_at
+            - updated_at
           properties:
             id:
               type: string
@@ -1218,6 +1155,12 @@ components:
             href:
               type: string
               description: Resource URI
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
         name:
           type: string
           description: Name of the nodepool
@@ -1228,22 +1171,43 @@ components:
         status:
           type: object
           properties:
+            phase:
+              type: string
+              enum:
+                - Pending
+                - Ready
+                - Failed
+              description: |-
+                Current NodePool phase (native database column).
+                Updated when adapters report status.
+                Note: status.phase provides aggregated view from all adapter conditions.
             observed_generation:
               type: integer
               description: |-
                 Last generation processed by adapters
+                Updated when adapters report status.
                 This will be the lowest value of each adapter's observed_generation values
+                The phase value is based on this generation
             last_transition_time:
               type: string
               format: date-time
               description: When NodePool last transitioned (updated by adapters, used by Sentinel for backoff)
+            updated_at:
+              type: string
+              format: date-time
+              description: |-
+                Time of the last complete report from adapters
+                Updated when adapters report status.
+                Oldest `updated_at` from the adapter conditions
             adapters:
               type: array
               items:
                 $ref: '#/components/schemas/ConditionAvailable'
           required:
+            - phase
             - observed_generation
             - last_transition_time
+            - updated_at
             - adapters
     NodepoolCreateRequest:
       type: object
