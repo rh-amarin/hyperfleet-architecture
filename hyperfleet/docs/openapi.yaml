@@ -1,0 +1,1034 @@
+openapi: 3.0.0
+info:
+  title: HyperFleet API
+  version: 1.0.0
+  contact:
+    name: HyperFleet Team
+  description: |-
+    HyperFleet API provides simple CRUD operations for managing cluster resources and their status history.
+
+    **Architecture**: v2 - Simple CRUD only, no business logic, no event creation.
+    Sentinel operator handles all orchestration logic.
+tags:
+  - name: Nodepools
+  - name: Statuses
+    description: Cluster status
+  - name: Clusters
+    description: Cluster resource CRUD operations
+paths:
+  /api/clusters/:
+    get:
+      operationId: Clusters_get_clusters
+      summary: List clusters
+      parameters:
+        - $ref: '#/components/parameters/QueryParams.search'
+        - $ref: '#/components/parameters/QueryParams.page'
+        - $ref: '#/components/parameters/QueryParams.pageSize'
+        - $ref: '#/components/parameters/QueryParams.orderBy'
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - page
+                  - size
+                  - total
+                  - items
+                properties:
+                  page:
+                    type: integer
+                  size:
+                    type: integer
+                  total:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Cluster'
+      tags:
+        - Clusters
+    post:
+      operationId: Clusters_post_cluster
+      summary: Create cluster
+      description: |-
+        Create a new cluster resource.
+
+        **Note**: The `status` object in the response is read-only and computed by the service.
+        It is NOT part of the request body. Initially, status.phase will be "Pending" and
+        status.adapters will be empty until adapters POST their status.
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cluster'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+      tags:
+        - Clusters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClusterCreateRequest'
+  /api/clusters/{cluster_id}:
+    get:
+      operationId: Clusters_get_cluster_by_id
+      summary: Get cluster by ID
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cluster'
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - Clusters
+    delete:
+      operationId: Clusters_delete_cluster
+      summary: Delete cluster
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: There is no content to send for this request, but the headers may be useful.
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - Clusters
+    patch:
+      operationId: Clusters_patch_cluster
+      summary: Update cluster
+      description: |-
+        Updates cluster spec and increments generation field.
+
+        **Note**: The `status` object is read-only and CANNOT be modified via this endpoint.
+        Status is aggregated from adapter status updates via `/clusters/{id}/statuses` endpoints.
+        Only spec fields (name, region) can be updated here.
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cluster'
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - Clusters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClusterUpdateRequest'
+  /api/clusters/{cluster_id}/nodepools:
+    get:
+      operationId: Nodepools_get_nodepools
+      summary: List all nodepools for cluster
+      description: Returns the list of nodepools
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/QueryParams.search'
+        - $ref: '#/components/parameters/QueryParams.page'
+        - $ref: '#/components/parameters/QueryParams.pageSize'
+        - $ref: '#/components/parameters/QueryParams.orderBy'
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - page
+                  - size
+                  - total
+                  - items
+                properties:
+                  page:
+                    type: integer
+                  size:
+                    type: integer
+                  total:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Nodepool'
+      tags:
+        - Nodepools
+  /api/clusters/{cluster_id}/nodepools/:
+    post:
+      operationId: Nodepools_create_nodepool
+      summary: Create nodepool
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+        '404':
+          description: The server cannot find the requested resource.
+        '409':
+          description: The request conflicts with the current state of the server.
+      tags:
+        - Nodepools
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodepoolCreateRequest'
+  /api/clusters/{cluster_id}/nodepools/{nodepool_id}:
+    delete:
+      operationId: Nodepools_delete_nodepool
+      summary: Delete nodepool
+      description: Delete nodepool
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - name: nodepool_id
+          in: path
+          required: true
+          description: Nodepool ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: There is no content to send for this request, but the headers may be useful.
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - Nodepools
+    get:
+      operationId: Nodepools_get_nodepool
+      summary: Get nodepool by ID
+      description: Returns specific nodepool
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - name: nodepool_id
+          in: path
+          required: true
+          description: Nodepool ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Nodepool'
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - Nodepools
+    patch:
+      operationId: Nodepools_patch_nodepool
+      summary: Update nodepool
+      description: |-
+        Adapter updates its status object.
+        Service computes lastTransitionTime for conditions when status changes.
+        Service updates lastUpdated timestamp automatically.
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - name: nodepool_id
+          in: path
+          required: true
+          description: Nodepool ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Nodepool'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - Nodepools
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodepoolUpdateRequest'
+  /api/clusters/{cluster_id}/statuses/:
+    get:
+      operationId: Statuses_get_statuses
+      summary: List all adapter statuses for cluster
+      description: Returns current status object for each adapter that has reported status
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/QueryParams.search'
+        - $ref: '#/components/parameters/QueryParams.page'
+        - $ref: '#/components/parameters/QueryParams.pageSize'
+        - $ref: '#/components/parameters/QueryParams.orderBy'
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - page
+                  - size
+                  - total
+                  - items
+                properties:
+                  page:
+                    type: integer
+                  size:
+                    type: integer
+                  total:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdapterStatus'
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - Statuses
+    post:
+      operationId: Statuses_post_statuses
+      summary: Create adapter status
+      description: |-
+        Adapter creates its initial status object for this cluster.
+        Returns 409 if adapter already has a status object for this cluster (use PATCH to update).
+
+        Response includes the status UUID and href for future PATCH operations.
+        Adapter should store the returned id/href to update its status later.
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterStatus'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+        '404':
+          description: The server cannot find the requested resource.
+        '409':
+          description: The request conflicts with the current state of the server.
+      tags:
+        - Statuses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdapterStatusCreateRequest'
+  /api/clusters/{cluster_id}/statuses/{status_id}:
+    delete:
+      operationId: Statuses_delete_status
+      summary: Delete adapter status
+      description: |-
+        Delete adapter status resource.
+
+        This removes the adapter's status from the cluster and updates the cluster's
+        status.adapters array. Use when:
+        - Adapter is being removed/disabled
+        - Cleaning up test data
+        - Recovering from errors (delete then POST new status)
+
+        **Note**: Deleting adapter status does NOT delete the cluster.
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - name: status_id
+          in: path
+          required: true
+          description: Status ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: There is no content to send for this request, but the headers may be useful.
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - Statuses
+    get:
+      operationId: Statuses_get_status_by_id
+      summary: Get adapter status by ID
+      description: Returns specific adapter status resource
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - name: status_id
+          in: path
+          required: true
+          description: Status ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterStatus'
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - Statuses
+    patch:
+      operationId: Statuses_patch_statuses
+      summary: Update adapter status
+      description: |-
+        Adapter updates its status object.
+        Service computes lastTransitionTime for conditions when status changes.
+        Service updates lastUpdated timestamp automatically.
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - name: status_id
+          in: path
+          required: true
+          description: Status ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterStatus'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - Statuses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdapterStatusUpdateRequest'
+components:
+  parameters:
+    QueryParams.orderBy:
+      name: orderBy
+      in: query
+      required: false
+      schema:
+        type: string
+        default: created_at
+      explode: false
+    QueryParams.page:
+      name: page
+      in: query
+      required: false
+      schema:
+        type: integer
+        format: int32
+        default: 1
+      explode: false
+    QueryParams.pageSize:
+      name: pageSize
+      in: query
+      required: false
+      schema:
+        type: integer
+        format: int32
+        default: 20
+      explode: false
+    QueryParams.search:
+      name: search
+      in: query
+      required: false
+      schema:
+        type: string
+      explode: false
+  schemas:
+    AdapterStatus:
+      type: object
+      required:
+        - id
+        - kind
+        - href
+        - labels
+        - adapter_name
+        - owner_references
+        - observed_generation
+        - conditions
+        - last_updated
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Resource identifier
+        kind:
+          type: string
+          enum:
+            - Status
+          description: Resource kind
+        href:
+          type: string
+          description: Resource URI
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: labels for the API resource as pairs of name:value strings
+        adapter_name:
+          type: string
+          description: Name of the adapter that generated this status (Validator, DNS...)
+        owner_references:
+          type: object
+          required:
+            - id
+            - kind
+            - href
+            - labels
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: Resource identifier
+            kind:
+              type: string
+              enum:
+                - Cluster
+              description: Resource kind
+            href:
+              type: string
+              description: Resource URI
+            labels:
+              type: object
+              additionalProperties:
+                type: string
+              description: labels for the API resource as pairs of name:value strings
+          description: Reference to the cluster to which this adapter status pertains
+        observed_generation:
+          type: integer
+          description: Which generation for an entity (Clusters, NodePools) was current at the time of creating this status
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Condition'
+          description: Kubernetes-style conditions tracking adapter state
+        data:
+          type: object
+          additionalProperties: {}
+          description: Adapter-specific data (structure varies by adapter type)
+        metadata:
+          type: object
+          properties:
+            job_name:
+              type: string
+            job_namespace:
+              type: string
+            attempt:
+              type: integer
+            started_at:
+              type: string
+              format: date-time
+            completed_at:
+              type: string
+              format: date-time
+            duration:
+              type: string
+          description: Metadata about the adapter job/execution
+        last_updated:
+          type: string
+          format: date-time
+          description: When this status was last updated (computed by service)
+        created_at:
+          type: string
+          format: date-time
+          description: When adapter first created this status
+    AdapterStatusCreateRequest:
+      type: object
+      required:
+        - adapter_name
+        - observed_generation
+        - conditions
+      properties:
+        adapter_name:
+          type: string
+          description: Adapter identifier
+        observed_generation:
+          type: integer
+          description: Which cluster generation this status reflects
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Condition'
+        data:
+          type: object
+          additionalProperties: {}
+          description: Adapter-specific data
+        metadata:
+          type: object
+          additionalProperties: {}
+          description: Job execution metadata
+    AdapterStatusUpdateRequest:
+      type: object
+      properties:
+        observed_generation:
+          type: integer
+          description: Update observed generation
+        conditions:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              status:
+                type: string
+                enum:
+                  - 'True'
+                  - 'False'
+                  - Unknown
+              reason:
+                type: string
+              message:
+                type: string
+            required:
+              - type
+              - status
+          description: Update conditions (service computes lastTransitionTime)
+        data:
+          type: object
+          additionalProperties: {}
+          description: Update adapter-specific data
+        metadata:
+          type: object
+          additionalProperties: {}
+          description: Update job metadata
+    Cluster:
+      type: object
+      required:
+        - id
+        - kind
+        - href
+        - labels
+        - name
+        - spec
+        - generation
+        - status
+        - created_at
+        - updated_at
+        - created_by
+        - updated_by
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Resource identifier
+        kind:
+          type: string
+          enum:
+            - Cluster
+          description: Resource kind
+        href:
+          type: string
+          description: Resource URI
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: labels for the API resource as pairs of name:value strings
+        name:
+          type: string
+          description: Cluster name (unique)
+        spec:
+          type: object
+          additionalProperties: {}
+          description: |-
+            Cluster specification
+            CLM doesn't know how to unmarshall the spec, it only stores and forwards to adapters to do their job
+            But CLM will validate the schema before accepting the request
+        generation:
+          type: integer
+          description: Generation field is updated on customer updates, reflecting the version of the "intent" of the customer
+        status:
+          type: object
+          properties:
+            phase:
+              type: string
+              enum:
+                - Pending
+                - Ready
+                - Failed
+              description: |-
+                Current cluster phase (native database column).
+                Updated when adapters POST status. Used by Sentinel for queries.
+                Note: status.phase provides aggregated view from all adapter conditions.
+            observed_generation:
+              type: integer
+              description: |-
+                Last generation processed by adapters
+                This will be the lowest value of each adapter's observed_generation values
+            last_transition_time:
+              type: string
+              format: date-time
+              description: When cluster last transitioned (updated by adapters, used by Sentinel for backoff)
+            adapters:
+              type: array
+              items:
+                $ref: '#/components/schemas/ConditionAvailable'
+          required:
+            - phase
+            - observed_generation
+            - last_transition_time
+            - adapters
+          description: |-
+            Cluster status aggregation from all adapters.
+
+            This object is computed by the service and CANNOT be modified directly.
+            It is aggregated from adapter status updates posted to `/clusters/{id}/statuses`.
+
+            Provides quick overview of which adapters have reported and aggregated phase.
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        updated_by:
+          type: string
+    ClusterCreateRequest:
+      type: object
+      required:
+        - id
+        - kind
+        - href
+        - labels
+        - name
+        - spec
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Resource identifier
+        kind:
+          type: string
+          enum:
+            - Cluster
+          description: Resource kind
+        href:
+          type: string
+          description: Resource URI
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: labels for the API resource as pairs of name:value strings
+        name:
+          type: string
+          description: Cluster name (unique)
+        spec:
+          type: object
+          additionalProperties: {}
+          description: |-
+            Cluster specification
+            CLM doesn't know how to unmarshall the spec, it only stores and forwards to adapters to do their job
+            But CLM will validate the schema before accepting the request
+    ClusterUpdateRequest:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Resource identifier
+        kind:
+          type: string
+          enum:
+            - Cluster
+          description: Resource kind
+        href:
+          type: string
+          description: Resource URI
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: labels for the API resource as pairs of name:value strings
+        name:
+          type: string
+          description: Cluster name (unique)
+        spec:
+          type: object
+          additionalProperties: {}
+          description: |-
+            Cluster specification
+            CLM doesn't know how to unmarshall the spec, it only stores and forwards to adapters to do their job
+            But CLM will validate the schema before accepting the request
+    Condition:
+      type: object
+      required:
+        - adapter
+        - type
+        - status
+        - observed_generation
+        - created_at
+      properties:
+        adapter:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum:
+            - 'True'
+            - 'False'
+            - Unknown
+          description: Condition status
+        reason:
+          type: string
+          description: Machine-readable reason code
+        message:
+          type: string
+          description: Human-readable message
+        observed_generation:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        last_transition_time:
+          type: string
+          format: date-time
+          description: When this condition last transitioned (computed by service when status changes)
+    ConditionAvailable:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - Available
+      allOf:
+        - $ref: '#/components/schemas/ConditionBase'
+      description: |-
+        StatusAvailable is the status condition from an adapter that is used by CLM to compute the phase.
+        `phase=ready` when all adaptors report `Available=true`
+    ConditionBase:
+      type: object
+      required:
+        - adapter
+        - type
+        - status
+        - observed_generation
+        - created_at
+      properties:
+        adapter:
+          type: string
+        type:
+          type: string
+        status:
+          type: string
+          enum:
+            - 'True'
+            - 'False'
+            - Unknown
+          description: Condition status
+        reason:
+          type: string
+          description: Machine-readable reason code
+        message:
+          type: string
+          description: Human-readable message
+        observed_generation:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+      description: |-
+        Common data for status objects, part of:
+        - Status entity (stored in DB)
+        - Request payload
+    Nodepool:
+      type: object
+      required:
+        - id
+        - kind
+        - href
+        - labels
+        - owner_references
+        - name
+        - spec
+        - status
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Resource identifier
+        kind:
+          type: string
+          enum:
+            - NodePool
+          description: Resource kind
+        href:
+          type: string
+          description: Resource URI
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: labels for the API resource as pairs of name:value strings
+        owner_references:
+          type: object
+          required:
+            - id
+            - kind
+            - href
+          properties:
+            id:
+              type: string
+              format: uuid
+              description: Resource identifier
+            kind:
+              type: string
+              enum:
+                - Cluster
+              description: Resource kind
+            href:
+              type: string
+              description: Resource URI
+        name:
+          type: string
+          description: Name of the nodepool
+        spec:
+          type: object
+          additionalProperties: {}
+          description: NodePool specification
+        status:
+          type: object
+          properties:
+            observed_generation:
+              type: integer
+              description: |-
+                Last generation processed by adapters
+                This will be the lowest value of each adapter's observed_generation values
+            last_transition_time:
+              type: string
+              format: date-time
+              description: When NodePool last transitioned (updated by adapters, used by Sentinel for backoff)
+            adapters:
+              type: array
+              items:
+                $ref: '#/components/schemas/ConditionAvailable'
+          required:
+            - observed_generation
+            - last_transition_time
+            - adapters
+    NodepoolCreateRequest:
+      type: object
+    NodepoolUpdateRequest:
+      type: object
+servers:
+  - url: https://api.hyperfleet.dev.example.com
+    description: Development
+    variables: {}
+  - url: https://api.hyperfleet.example.com
+    description: Production
+    variables: {}
