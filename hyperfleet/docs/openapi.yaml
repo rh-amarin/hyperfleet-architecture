@@ -7,12 +7,15 @@ info:
   description: |-
     HyperFleet API provides simple CRUD operations for managing cluster resources and their status history.
 
-    **Architecture**: v2 - Simple CRUD only, no business logic, no event creation.
+    **Architecture**: Simple CRUD only, no business logic, no event creation.
     Sentinel operator handles all orchestration logic.
+    Adapters handle the specifics of managing spec
 tags:
-  - name: Nodepools
-  - name: Statuses
-    description: Cluster status
+  - name: NodePool statuses
+  - name: Cluster statuses
+    description: ' status '
+  - name: NodePools
+    description: NodePool resource CRUD operations
   - name: Clusters
     description: Cluster resource CRUD operations
 paths:
@@ -190,7 +193,7 @@ paths:
                     items:
                       $ref: '#/components/schemas/Nodepool'
       tags:
-        - Nodepools
+        - NodePools
   /api/clusters/{cluster_id}/nodepools/:
     post:
       operationId: Nodepools_create_nodepool
@@ -213,7 +216,7 @@ paths:
         '409':
           description: The request conflicts with the current state of the server.
       tags:
-        - Nodepools
+        - NodePools
       requestBody:
         required: true
         content:
@@ -246,7 +249,7 @@ paths:
         '404':
           description: The server cannot find the requested resource.
       tags:
-        - Nodepools
+        - NodePools
     get:
       operationId: Nodepools_get_nodepool
       summary: Get nodepool by ID
@@ -276,7 +279,7 @@ paths:
         '404':
           description: The server cannot find the requested resource.
       tags:
-        - Nodepools
+        - NodePools
     patch:
       operationId: Nodepools_patch_nodepool
       summary: Update nodepool
@@ -311,16 +314,235 @@ paths:
         '404':
           description: The server cannot find the requested resource.
       tags:
-        - Nodepools
+        - NodePools
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/NodepoolUpdateRequest'
+  /api/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses/:
+    get:
+      operationId: NodePoolStatuses_get_statuses
+      summary: List all adapter statuses for nodepools
+      description: Returns current status object for each adapter that has reported status
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - name: nodepool_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: '#/components/parameters/QueryParams.search'
+        - $ref: '#/components/parameters/QueryParams.page'
+        - $ref: '#/components/parameters/QueryParams.pageSize'
+        - $ref: '#/components/parameters/QueryParams.orderBy'
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - page
+                  - size
+                  - total
+                  - items
+                properties:
+                  page:
+                    type: integer
+                  size:
+                    type: integer
+                  total:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdapterStatus'
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - NodePool statuses
+    post:
+      operationId: NodePoolStatuses_post_statuses
+      summary: Create adapter status
+      description: |-
+        Adapter creates its initial status object for this cluster.
+        Returns 409 if adapter already has a status object for this cluster (use PATCH to update).
+
+        Response includes the status UUID and href for future PATCH operations.
+        Adapter should store the returned id/href to update its status later.
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - name: nodepool_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterStatus'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+        '404':
+          description: The server cannot find the requested resource.
+        '409':
+          description: The request conflicts with the current state of the server.
+      tags:
+        - NodePool statuses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdapterStatusCreateRequest'
+  /api/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses/{status_id}:
+    delete:
+      operationId: NodePoolStatuses_delete_status
+      summary: Delete adapter status
+      description: |-
+        Delete adapter status resource.
+
+        This removes the adapter's status from the cluster and updates the cluster's
+        status.adapters array. Use when:
+        - Adapter is being removed/disabled
+        - Cleaning up test data
+        - Recovering from errors (delete then POST new status)
+
+        **Note**: Deleting adapter status does NOT delete the cluster.
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - name: nodepool_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status_id
+          in: path
+          required: true
+          description: Status ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: There is no content to send for this request, but the headers may be useful.
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - NodePool statuses
+    get:
+      operationId: NodePoolStatuses_get_status_by_id
+      summary: Get adapter status by ID
+      description: Returns specific adapter status resource
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - name: nodepool_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status_id
+          in: path
+          required: true
+          description: Status ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterStatus'
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - NodePool statuses
+    patch:
+      operationId: NodePoolStatuses_patch_statuses
+      summary: Update adapter status
+      description: |-
+        Adapter updates its status object.
+        Service computes lastTransitionTime for conditions when status changes.
+        Service updates lastUpdated timestamp automatically.
+      parameters:
+        - name: cluster_id
+          in: path
+          required: true
+          description: Cluster ID
+          schema:
+            type: string
+            format: uuid
+        - name: nodepool_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: status_id
+          in: path
+          required: true
+          description: Status ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdapterStatus'
+        '400':
+          description: The server could not understand the request due to invalid syntax.
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - NodePool statuses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdapterStatusUpdateRequest'
   /api/clusters/{cluster_id}/statuses/:
     get:
-      operationId: Statuses_get_statuses
+      operationId: ClusterStatuses_get_statuses
       summary: List all adapter statuses for cluster
       description: Returns current status object for each adapter that has reported status
       parameters:
@@ -361,9 +583,9 @@ paths:
         '404':
           description: The server cannot find the requested resource.
       tags:
-        - Statuses
+        - Cluster statuses
     post:
-      operationId: Statuses_post_statuses
+      operationId: ClusterStatuses_post_statuses
       summary: Create adapter status
       description: |-
         Adapter creates its initial status object for this cluster.
@@ -393,7 +615,7 @@ paths:
         '409':
           description: The request conflicts with the current state of the server.
       tags:
-        - Statuses
+        - Cluster statuses
       requestBody:
         required: true
         content:
@@ -402,7 +624,7 @@ paths:
               $ref: '#/components/schemas/AdapterStatusCreateRequest'
   /api/clusters/{cluster_id}/statuses/{status_id}:
     delete:
-      operationId: Statuses_delete_status
+      operationId: ClusterStatuses_delete_status
       summary: Delete adapter status
       description: |-
         Delete adapter status resource.
@@ -435,9 +657,9 @@ paths:
         '404':
           description: The server cannot find the requested resource.
       tags:
-        - Statuses
+        - Cluster statuses
     get:
-      operationId: Statuses_get_status_by_id
+      operationId: ClusterStatuses_get_status_by_id
       summary: Get adapter status by ID
       description: Returns specific adapter status resource
       parameters:
@@ -465,9 +687,9 @@ paths:
         '404':
           description: The server cannot find the requested resource.
       tags:
-        - Statuses
+        - Cluster statuses
     patch:
-      operationId: Statuses_patch_statuses
+      operationId: ClusterStatuses_patch_statuses
       summary: Update adapter status
       description: |-
         Adapter updates its status object.
@@ -500,7 +722,7 @@ paths:
         '404':
           description: The server cannot find the requested resource.
       tags:
-        - Statuses
+        - Cluster statuses
       requestBody:
         required: true
         content:
@@ -564,7 +786,8 @@ components:
         kind:
           type: string
           enum:
-            - Status
+            - ClusterStatus
+            - NodePoolStatus
           description: Resource kind
         href:
           type: string
@@ -593,6 +816,7 @@ components:
               type: string
               enum:
                 - Cluster
+                - NodePool
               description: Resource kind
             href:
               type: string
