@@ -22,7 +22,7 @@ tags:
 paths:
   /api/clusters:
     get:
-      operationId: Clusters_get_clusters
+      operationId: getClusters
       summary: List clusters
       parameters:
         - $ref: '#/components/parameters/QueryParams.search'
@@ -58,7 +58,7 @@ paths:
       tags:
         - Clusters
     post:
-      operationId: Clusters_post_cluster
+      operationId: postCluster
       summary: Create cluster
       description: |-
         Create a new cluster resource.
@@ -86,7 +86,7 @@ paths:
               $ref: '#/components/schemas/ClusterCreateRequest'
   /api/clusters/nodepools:
     get:
-      operationId: NodePools_get_all_nodepools
+      operationId: getNodePools
       summary: List all nodepools for cluster
       description: Returns the list of all nodepools
       parameters:
@@ -124,7 +124,7 @@ paths:
         - NodePools
   /api/clusters/nodepools/{nodepool_id}:
     get:
-      operationId: NodePools_get_nodepool
+      operationId: getNodePoolById
       summary: Get nodepool by ID
       description: Returns specific nodepool
       parameters:
@@ -134,7 +134,6 @@ paths:
           description: NodePool ID
           schema:
             type: string
-            format: uuid
       responses:
         '200':
           description: The request has succeeded.
@@ -148,7 +147,7 @@ paths:
         - NodePools
   /api/clusters/{cluster_id}:
     get:
-      operationId: Clusters_get_cluster_by_id
+      operationId: getClusterById
       summary: Get cluster by ID
       parameters:
         - name: cluster_id
@@ -156,7 +155,6 @@ paths:
           required: true
           schema:
             type: string
-            format: uuid
       responses:
         '200':
           description: The request has succeeded.
@@ -170,7 +168,7 @@ paths:
         - Clusters
   /api/clusters/{cluster_id}/nodepools:
     get:
-      operationId: NodePools_get_nodepools_by_cluster_id
+      operationId: getNodePoolsByClusterId
       summary: List all nodepools for cluster
       description: Returns the list of all nodepools for a cluster
       parameters:
@@ -180,7 +178,6 @@ paths:
           description: Cluster ID
           schema:
             type: string
-            format: uuid
         - $ref: '#/components/parameters/QueryParams.search'
         - $ref: '#/components/parameters/QueryParams.page'
         - $ref: '#/components/parameters/QueryParams.pageSize'
@@ -214,7 +211,7 @@ paths:
       tags:
         - NodePools
     post:
-      operationId: NodePools_create_nodepool
+      operationId: createNodePool
       summary: Create nodepool
       description: Create a NodePool for a cluster
       parameters:
@@ -224,7 +221,6 @@ paths:
           description: Cluster ID
           schema:
             type: string
-            format: uuid
       responses:
         '201':
           description: The request has succeeded and a new resource has been created as a result.
@@ -244,7 +240,7 @@ paths:
               $ref: '#/components/schemas/NodePoollCreateRequest'
   /api/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses:
     get:
-      operationId: NodePoolStatuses_get_statuses
+      operationId: getNodePoolsStatuses
       summary: List all adapter statuses for nodepools
       description: Returns current status object for each adapter that has reported status
       parameters:
@@ -254,13 +250,11 @@ paths:
           description: Cluster ID
           schema:
             type: string
-            format: uuid
         - name: nodepool_id
           in: path
           required: true
           schema:
             type: string
-            format: uuid
         - $ref: '#/components/parameters/QueryParams.search'
         - $ref: '#/components/parameters/QueryParams.page'
         - $ref: '#/components/parameters/QueryParams.pageSize'
@@ -296,13 +290,13 @@ paths:
       tags:
         - NodePool statuses
     post:
-      operationId: NodePoolStatuses_post_statuses
+      operationId: postNodePoolStatuses
       summary: Create adapter status
       description: |-
         Adapter creates its initial status object for this cluster.
         Returns 409 if adapter already has a status object for this cluster (use PATCH to update).
 
-        Response includes the status UUID and href for future PATCH operations.
+        Response includes the status id and href for future operations.
         Adapter should store the returned id/href to update its status later.
       parameters:
         - name: cluster_id
@@ -311,13 +305,11 @@ paths:
           description: Cluster ID
           schema:
             type: string
-            format: uuid
         - name: nodepool_id
           in: path
           required: true
           schema:
             type: string
-            format: uuid
       responses:
         '201':
           description: The request has succeeded and a new resource has been created as a result.
@@ -341,7 +333,7 @@ paths:
               $ref: '#/components/schemas/AdapterStatusCreateRequest'
   /api/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses/{status_id}:
     get:
-      operationId: NodePoolStatuses_get_status_by_id
+      operationId: getNodePoolStatusById
       summary: Get adapter status by ID
       description: Returns specific adapter status resource
       parameters:
@@ -351,20 +343,17 @@ paths:
           description: Cluster ID
           schema:
             type: string
-            format: uuid
         - name: nodepool_id
           in: path
           required: true
           schema:
             type: string
-            format: uuid
         - name: status_id
           in: path
           required: true
           description: Status ID
           schema:
             type: string
-            format: uuid
       responses:
         '200':
           description: The request has succeeded.
@@ -378,7 +367,7 @@ paths:
         - NodePool statuses
   /api/clusters/{cluster_id}/statuses:
     get:
-      operationId: ClusterStatuses_get_statuses
+      operationId: getClusterStatuses
       summary: List all adapter statuses for cluster
       description: Returns current status object for each adapter that has reported status
       parameters:
@@ -388,7 +377,6 @@ paths:
           description: Cluster ID
           schema:
             type: string
-            format: uuid
         - $ref: '#/components/parameters/QueryParams.search'
         - $ref: '#/components/parameters/QueryParams.page'
         - $ref: '#/components/parameters/QueryParams.pageSize'
@@ -424,13 +412,13 @@ paths:
       tags:
         - Cluster statuses
     post:
-      operationId: ClusterStatuses_post_statuses
+      operationId: postClusterStatuses
       summary: Create adapter status
       description: |-
         Adapter creates its initial status object for this cluster.
-        Returns 409 if adapter already has a status object for this cluster (use PATCH to update).
+        Returns 409 if adapter already has a status object for this cluster 
 
-        Response includes the status UUID and href for future PATCH operations.
+        Response includes the status id and href for future operations.
         Adapter should store the returned id/href to update its status later.
       parameters:
         - name: cluster_id
@@ -439,7 +427,6 @@ paths:
           description: Cluster ID
           schema:
             type: string
-            format: uuid
       responses:
         '201':
           description: The request has succeeded and a new resource has been created as a result.
@@ -463,7 +450,7 @@ paths:
               $ref: '#/components/schemas/AdapterStatusCreateRequest'
   /api/clusters/{cluster_id}/statuses/{status_id}:
     get:
-      operationId: ClusterStatuses_get_status_by_id
+      operationId: getClusterStatusById
       summary: Get adapter status by ID
       description: Returns specific adapter status resource
       parameters:
@@ -473,14 +460,12 @@ paths:
           description: Cluster ID
           schema:
             type: string
-            format: uuid
         - name: status_id
           in: path
           required: true
           description: Status ID
           schema:
             type: string
-            format: uuid
       responses:
         '200':
           description: The request has succeeded.
@@ -544,7 +529,6 @@ components:
       properties:
         id:
           type: string
-          format: uuid
           description: Resource identifier
         kind:
           type: string
@@ -581,7 +565,6 @@ components:
           properties:
             id:
               type: string
-              format: uuid
               description: Resource identifier
             kind:
               type: string
@@ -680,7 +663,6 @@ components:
       properties:
         id:
           type: string
-          format: uuid
           description: Resource identifier
         kind:
           type: string
@@ -784,7 +766,6 @@ components:
       properties:
         id:
           type: string
-          format: uuid
           description: Resource identifier
         kind:
           type: string
@@ -935,7 +916,6 @@ components:
       properties:
         id:
           type: string
-          format: uuid
           description: Resource identifier
         kind:
           type: string
@@ -967,7 +947,6 @@ components:
           properties:
             id:
               type: string
-              format: uuid
               description: Resource identifier
             kind:
               type: string
