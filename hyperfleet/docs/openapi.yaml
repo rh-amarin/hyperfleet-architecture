@@ -29,6 +29,7 @@ paths:
         - $ref: '#/components/parameters/QueryParams.page'
         - $ref: '#/components/parameters/QueryParams.pageSize'
         - $ref: '#/components/parameters/QueryParams.orderBy'
+        - $ref: '#/components/parameters/QueryParams.order'
       responses:
         '200':
           description: The request has succeeded.
@@ -64,7 +65,7 @@ paths:
         Create a new cluster resource.
 
         **Note**: The `status` object in the response is read-only and computed by the service.
-        It is NOT part of the request body. Initially, status.phase will be "Pending" and
+        It is NOT part of the request body. Initially, status.phase will be "NotReady" and
         status.adapters will be empty until adapters POST their status.
       parameters: []
       responses:
@@ -94,6 +95,7 @@ paths:
         - $ref: '#/components/parameters/QueryParams.page'
         - $ref: '#/components/parameters/QueryParams.pageSize'
         - $ref: '#/components/parameters/QueryParams.orderBy'
+        - $ref: '#/components/parameters/QueryParams.order'
       responses:
         '200':
           description: The request has succeeded.
@@ -182,6 +184,7 @@ paths:
         - $ref: '#/components/parameters/QueryParams.page'
         - $ref: '#/components/parameters/QueryParams.pageSize'
         - $ref: '#/components/parameters/QueryParams.orderBy'
+        - $ref: '#/components/parameters/QueryParams.order'
       responses:
         '200':
           description: The request has succeeded.
@@ -224,6 +227,10 @@ paths:
       responses:
         '201':
           description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodePoolCreateResponse'
         '400':
           description: The server could not understand the request due to invalid syntax.
         '404':
@@ -237,7 +244,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NodePoollCreateRequest'
+              $ref: '#/components/schemas/NodePoolCreateRequest'
   /api/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses:
     get:
       operationId: getNodePoolsStatuses
@@ -259,6 +266,7 @@ paths:
         - $ref: '#/components/parameters/QueryParams.page'
         - $ref: '#/components/parameters/QueryParams.pageSize'
         - $ref: '#/components/parameters/QueryParams.orderBy'
+        - $ref: '#/components/parameters/QueryParams.order'
       responses:
         '200':
           description: The request has succeeded.
@@ -294,7 +302,7 @@ paths:
       summary: Create adapter status
       description: |-
         Adapter creates its initial status object for this cluster.
-        Returns 409 if adapter already has a status object for this cluster (use PATCH to update).
+        Returns 409 if adapter already has a status object for this cluster 
 
         Response includes the status id and href for future operations.
         Adapter should store the returned id/href to update its status later.
@@ -381,6 +389,7 @@ paths:
         - $ref: '#/components/parameters/QueryParams.page'
         - $ref: '#/components/parameters/QueryParams.pageSize'
         - $ref: '#/components/parameters/QueryParams.orderBy'
+        - $ref: '#/components/parameters/QueryParams.order'
       responses:
         '200':
           description: The request has succeeded.
@@ -479,6 +488,14 @@ paths:
         - Cluster statuses
 components:
   parameters:
+    QueryParams.order:
+      name: order
+      in: query
+      required: false
+      schema:
+        type: string
+        default: desc
+      explode: false
     QueryParams.orderBy:
       name: orderBy
       in: query
@@ -561,7 +578,6 @@ components:
             - href
             - created_at
             - updated_at
-            - labels
           properties:
             id:
               type: string
@@ -581,11 +597,6 @@ components:
             updated_at:
               type: string
               format: date-time
-            labels:
-              type: object
-              additionalProperties:
-                type: string
-              description: labels for the API resource as pairs of name:value strings
           description: Reference to the cluster to which this adapter status pertains
         observed_generation:
           type: integer
@@ -703,7 +714,7 @@ components:
             phase:
               type: string
               enum:
-                - Pending
+                - NotReady
                 - Ready
                 - Failed
               description: |-
@@ -799,15 +810,12 @@ components:
     Condition:
       type: object
       required:
-        - adapter
         - type
         - status
         - observed_generation
         - created_at
         - updated_at
       properties:
-        adapter:
-          type: string
         type:
           type: string
         status:
@@ -858,15 +866,12 @@ components:
     ConditionBase:
       type: object
       required:
-        - adapter
         - type
         - status
         - observed_generation
         - created_at
         - updated_at
       properties:
-        adapter:
-          type: string
         type:
           type: string
         status:
@@ -909,9 +914,9 @@ components:
         - created_at
         - updated_at
         - labels
-        - owner_references
         - name
         - spec
+        - owner_references
         - status
       properties:
         id:
@@ -936,6 +941,16 @@ components:
           additionalProperties:
             type: string
           description: labels for the API resource as pairs of name:value strings
+        name:
+          type: string
+          description: NodePool name (unique in a cluster)
+        spec:
+          type: object
+          additionalProperties: {}
+          description: |-
+            Cluster specification
+            CLM doesn't know how to unmarshall the spec, it only stores and forwards to adapters to do their job
+            But CLM will validate the schema before accepting the request
         owner_references:
           type: object
           required:
@@ -962,20 +977,13 @@ components:
             updated_at:
               type: string
               format: date-time
-        name:
-          type: string
-          description: Name of the NodePool
-        spec:
-          type: object
-          additionalProperties: {}
-          description: NodePool specification
         status:
           type: object
           properties:
             phase:
               type: string
               enum:
-                - Pending
+                - NotReady
                 - Ready
                 - Failed
               description: |-
@@ -1011,8 +1019,164 @@ components:
             - last_transition_time
             - updated_at
             - adapters
-    NodePoollCreateRequest:
+    NodePoolCreateRequest:
       type: object
+      required:
+        - id
+        - kind
+        - href
+        - created_at
+        - updated_at
+        - labels
+        - name
+        - spec
+      properties:
+        id:
+          type: string
+          description: Resource identifier
+        kind:
+          type: string
+          enum:
+            - NodePool
+          description: Resource kind
+        href:
+          type: string
+          description: Resource URI
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: labels for the API resource as pairs of name:value strings
+        name:
+          type: string
+          description: NodePool name (unique in a cluster)
+        spec:
+          type: object
+          additionalProperties: {}
+          description: |-
+            Cluster specification
+            CLM doesn't know how to unmarshall the spec, it only stores and forwards to adapters to do their job
+            But CLM will validate the schema before accepting the request
+    NodePoolCreateResponse:
+      type: object
+      required:
+        - id
+        - kind
+        - href
+        - created_at
+        - updated_at
+        - labels
+        - name
+        - spec
+        - owner_references
+        - status
+      properties:
+        id:
+          type: string
+          description: Resource identifier
+        kind:
+          type: string
+          enum:
+            - NodePool
+          description: Resource kind
+        href:
+          type: string
+          description: Resource URI
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: labels for the API resource as pairs of name:value strings
+        name:
+          type: string
+          description: NodePool name (unique in a cluster)
+        spec:
+          type: object
+          additionalProperties: {}
+          description: |-
+            Cluster specification
+            CLM doesn't know how to unmarshall the spec, it only stores and forwards to adapters to do their job
+            But CLM will validate the schema before accepting the request
+        owner_references:
+          type: object
+          required:
+            - id
+            - kind
+            - href
+            - created_at
+            - updated_at
+          properties:
+            id:
+              type: string
+              description: Resource identifier
+            kind:
+              type: string
+              enum:
+                - Cluster
+              description: Resource kind
+            href:
+              type: string
+              description: Resource URI
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+        status:
+          type: object
+          properties:
+            phase:
+              type: string
+              enum:
+                - NotReady
+                - Ready
+                - Failed
+              description: |-
+                Current NodePool phase (native database column).
+                Updated when adapters report status.
+                Note: status.phase provides aggregated view from all adapter conditions.
+            observed_generation:
+              type: integer
+              format: int32
+              description: |-
+                Last generation processed by adapters
+                Updated when adapters report status.
+                This will be the lowest value of each adapter's observed_generation values
+                The phase value is based on this generation
+            last_transition_time:
+              type: string
+              format: date-time
+              description: When NodePool last transitioned (updated by adapters, used by Sentinel for backoff)
+            updated_at:
+              type: string
+              format: date-time
+              description: |-
+                Time of the last complete report from adapters
+                Updated when adapters report status.
+                Oldest `updated_at` from the adapter conditions
+            adapters:
+              type: array
+              items:
+                $ref: '#/components/schemas/ConditionAvailable'
+          required:
+            - phase
+            - observed_generation
+            - last_transition_time
+            - updated_at
+            - adapters
 servers:
   - url: https://api.hyperfleet.dev.example.com
     description: Development
