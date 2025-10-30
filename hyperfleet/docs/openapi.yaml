@@ -12,14 +12,15 @@ info:
     Adapters handle the specifics of managing spec
 tags:
   - name: NodePool statuses
+    description: Status for NodePools
   - name: Cluster statuses
-    description: ' status '
+    description: Status for Clusters
   - name: NodePools
     description: NodePool resource CRUD operations
   - name: Clusters
     description: Cluster resource CRUD operations
 paths:
-  /api/clusters/:
+  /api/clusters:
     get:
       operationId: Clusters_get_clusters
       summary: List clusters
@@ -43,10 +44,13 @@ paths:
                 properties:
                   page:
                     type: integer
+                    format: int32
                   size:
                     type: integer
+                    format: int32
                   total:
                     type: integer
+                    format: int32
                   items:
                     type: array
                     items:
@@ -80,6 +84,68 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ClusterCreateRequest'
+  /api/clusters/nodepools:
+    get:
+      operationId: NodePools_get_all_nodepools
+      summary: List all nodepools for cluster
+      description: Returns the list of all nodepools
+      parameters:
+        - $ref: '#/components/parameters/QueryParams.search'
+        - $ref: '#/components/parameters/QueryParams.page'
+        - $ref: '#/components/parameters/QueryParams.pageSize'
+        - $ref: '#/components/parameters/QueryParams.orderBy'
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - page
+                  - size
+                  - total
+                  - items
+                properties:
+                  page:
+                    type: integer
+                    format: int32
+                  size:
+                    type: integer
+                    format: int32
+                  total:
+                    type: integer
+                    format: int32
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NodePool'
+      tags:
+        - NodePools
+  /api/clusters/nodepools/{nodepool_id}:
+    get:
+      operationId: NodePools_get_nodepool
+      summary: Get nodepool by ID
+      description: Returns specific nodepool
+      parameters:
+        - name: nodepool_id
+          in: path
+          required: true
+          description: NodePool ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodePool'
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - NodePools
   /api/clusters/{cluster_id}:
     get:
       operationId: Clusters_get_cluster_by_id
@@ -102,61 +168,11 @@ paths:
           description: The server cannot find the requested resource.
       tags:
         - Clusters
-    delete:
-      operationId: Clusters_delete_cluster
-      summary: Delete cluster
-      parameters:
-        - name: cluster_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: There is no content to send for this request, but the headers may be useful.
-        '404':
-          description: The server cannot find the requested resource.
-      tags:
-        - Clusters
-    patch:
-      operationId: Clusters_patch_cluster
-      summary: Update cluster
-      description: |-
-        Updates cluster spec and increments generation field.
-
-        **Note**: The `status` object is read-only and CANNOT be modified via this endpoint.
-        Status is aggregated from adapter status updates via `/clusters/{id}/statuses` endpoints.
-        Only spec fields (name, region) can be updated here.
-      parameters:
-        - name: cluster_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: The request has succeeded.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Cluster'
-        '404':
-          description: The server cannot find the requested resource.
-      tags:
-        - Clusters
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ClusterUpdateRequest'
   /api/clusters/{cluster_id}/nodepools:
     get:
-      operationId: Nodepools_get_nodepools
+      operationId: NodePools_get_nodepools_by_cluster_id
       summary: List all nodepools for cluster
-      description: Returns the list of nodepools
+      description: Returns the list of all nodepools for a cluster
       parameters:
         - name: cluster_id
           in: path
@@ -184,20 +200,23 @@ paths:
                 properties:
                   page:
                     type: integer
+                    format: int32
                   size:
                     type: integer
+                    format: int32
                   total:
                     type: integer
+                    format: int32
                   items:
                     type: array
                     items:
-                      $ref: '#/components/schemas/Nodepool'
+                      $ref: '#/components/schemas/NodePool'
       tags:
         - NodePools
-  /api/clusters/{cluster_id}/nodepools/:
     post:
-      operationId: Nodepools_create_nodepool
+      operationId: NodePools_create_nodepool
       summary: Create nodepool
+      description: Create a NodePool for a cluster
       parameters:
         - name: cluster_id
           in: path
@@ -222,106 +241,8 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/NodepoolCreateRequest'
-  /api/clusters/{cluster_id}/nodepools/{nodepool_id}:
-    delete:
-      operationId: Nodepools_delete_nodepool
-      summary: Delete nodepool
-      description: Delete nodepool
-      parameters:
-        - name: cluster_id
-          in: path
-          required: true
-          description: Cluster ID
-          schema:
-            type: string
-            format: uuid
-        - name: nodepool_id
-          in: path
-          required: true
-          description: Nodepool ID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: There is no content to send for this request, but the headers may be useful.
-        '404':
-          description: The server cannot find the requested resource.
-      tags:
-        - NodePools
-    get:
-      operationId: Nodepools_get_nodepool
-      summary: Get nodepool by ID
-      description: Returns specific nodepool
-      parameters:
-        - name: cluster_id
-          in: path
-          required: true
-          description: Cluster ID
-          schema:
-            type: string
-            format: uuid
-        - name: nodepool_id
-          in: path
-          required: true
-          description: Nodepool ID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: The request has succeeded.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Nodepool'
-        '404':
-          description: The server cannot find the requested resource.
-      tags:
-        - NodePools
-    patch:
-      operationId: Nodepools_patch_nodepool
-      summary: Update nodepool
-      description: |-
-        Adapter updates its status object.
-        Service computes lastTransitionTime for conditions when status changes.
-        Service updates lastUpdated timestamp automatically.
-      parameters:
-        - name: cluster_id
-          in: path
-          required: true
-          description: Cluster ID
-          schema:
-            type: string
-            format: uuid
-        - name: nodepool_id
-          in: path
-          required: true
-          description: Nodepool ID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '200':
-          description: The request has succeeded.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Nodepool'
-        '400':
-          description: The server could not understand the request due to invalid syntax.
-        '404':
-          description: The server cannot find the requested resource.
-      tags:
-        - NodePools
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/NodepoolUpdateRequest'
-  /api/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses/:
+              $ref: '#/components/schemas/NodePoollCreateRequest'
+  /api/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses:
     get:
       operationId: NodePoolStatuses_get_statuses
       summary: List all adapter statuses for nodepools
@@ -359,10 +280,13 @@ paths:
                 properties:
                   page:
                     type: integer
+                    format: int32
                   size:
                     type: integer
+                    format: int32
                   total:
                     type: integer
+                    format: int32
                   items:
                     type: array
                     items:
@@ -416,47 +340,6 @@ paths:
             schema:
               $ref: '#/components/schemas/AdapterStatusCreateRequest'
   /api/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses/{status_id}:
-    delete:
-      operationId: NodePoolStatuses_delete_status
-      summary: Delete adapter status
-      description: |-
-        Delete adapter status resource.
-
-        This removes the adapter's status from the cluster and updates the cluster's
-        status.adapters array. Use when:
-        - Adapter is being removed/disabled
-        - Cleaning up test data
-        - Recovering from errors (delete then POST new status)
-
-        **Note**: Deleting adapter status does NOT delete the cluster.
-      parameters:
-        - name: cluster_id
-          in: path
-          required: true
-          description: Cluster ID
-          schema:
-            type: string
-            format: uuid
-        - name: nodepool_id
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: status_id
-          in: path
-          required: true
-          description: Status ID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: There is no content to send for this request, but the headers may be useful.
-        '404':
-          description: The server cannot find the requested resource.
-      tags:
-        - NodePool statuses
     get:
       operationId: NodePoolStatuses_get_status_by_id
       summary: Get adapter status by ID
@@ -493,7 +376,7 @@ paths:
           description: The server cannot find the requested resource.
       tags:
         - NodePool statuses
-  /api/clusters/{cluster_id}/statuses/:
+  /api/clusters/{cluster_id}/statuses:
     get:
       operationId: ClusterStatuses_get_statuses
       summary: List all adapter statuses for cluster
@@ -525,10 +408,13 @@ paths:
                 properties:
                   page:
                     type: integer
+                    format: int32
                   size:
                     type: integer
+                    format: int32
                   total:
                     type: integer
+                    format: int32
                   items:
                     type: array
                     items:
@@ -576,41 +462,6 @@ paths:
             schema:
               $ref: '#/components/schemas/AdapterStatusCreateRequest'
   /api/clusters/{cluster_id}/statuses/{status_id}:
-    delete:
-      operationId: ClusterStatuses_delete_status
-      summary: Delete adapter status
-      description: |-
-        Delete adapter status resource.
-
-        This removes the adapter's status from the cluster and updates the cluster's
-        status.adapters array. Use when:
-        - Adapter is being removed/disabled
-        - Cleaning up test data
-        - Recovering from errors (delete then POST new status)
-
-        **Note**: Deleting adapter status does NOT delete the cluster.
-      parameters:
-        - name: cluster_id
-          in: path
-          required: true
-          description: Cluster ID
-          schema:
-            type: string
-            format: uuid
-        - name: status_id
-          in: path
-          required: true
-          description: Status ID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: There is no content to send for this request, but the headers may be useful.
-        '404':
-          description: The server cannot find the requested resource.
-      tags:
-        - Cluster statuses
     get:
       operationId: ClusterStatuses_get_status_by_id
       summary: Get adapter status by ID
@@ -755,6 +606,7 @@ components:
           description: Reference to the cluster to which this adapter status pertains
         observed_generation:
           type: integer
+          format: int32
           description: Which generation for an entity (Clusters, NodePools) was current at the time of creating this status
         conditions:
           type: array
@@ -774,6 +626,7 @@ components:
               type: string
             attempt:
               type: integer
+              format: int32
             started_at:
               type: string
               format: date-time
@@ -795,6 +648,7 @@ components:
           description: Adapter identifier
         observed_generation:
           type: integer
+          format: int32
           description: Which cluster generation this status reflects
         conditions:
           type: array
@@ -859,6 +713,7 @@ components:
             But CLM will validate the schema before accepting the request
         generation:
           type: integer
+          format: int32
           description: Generation field is updated on customer updates, reflecting the version of the "intent" of the customer
         status:
           type: object
@@ -881,6 +736,7 @@ components:
                 Updated when adapters report status if the phase changes
             observed_generation:
               type: integer
+              format: int32
               description: |-
                 Last generation processed by adapters
                 Updated when adapters report status.
@@ -959,42 +815,6 @@ components:
             Cluster specification
             CLM doesn't know how to unmarshall the spec, it only stores and forwards to adapters to do their job
             But CLM will validate the schema before accepting the request
-    ClusterUpdateRequest:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-          description: Resource identifier
-        kind:
-          type: string
-          enum:
-            - Cluster
-          description: Resource kind
-        href:
-          type: string
-          description: Resource URI
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-        labels:
-          type: object
-          additionalProperties:
-            type: string
-          description: labels for the API resource as pairs of name:value strings
-        name:
-          type: string
-          description: Cluster name (unique)
-        spec:
-          type: object
-          additionalProperties: {}
-          description: |-
-            Cluster specification
-            CLM doesn't know how to unmarshall the spec, it only stores and forwards to adapters to do their job
-            But CLM will validate the schema before accepting the request
     Condition:
       type: object
       required:
@@ -1024,6 +844,7 @@ components:
           description: Human-readable message
         observed_generation:
           type: integer
+          format: int32
         created_at:
           type: string
           format: date-time
@@ -1082,6 +903,7 @@ components:
           description: Human-readable message
         observed_generation:
           type: integer
+          format: int32
         created_at:
           type: string
           format: date-time
@@ -1097,7 +919,7 @@ components:
         Common data for status objects, part of:
         - Status entity (stored in DB)
         - Request payload
-    Nodepool:
+    NodePool:
       type: object
       required:
         - id
@@ -1163,7 +985,7 @@ components:
               format: date-time
         name:
           type: string
-          description: Name of the nodepool
+          description: Name of the NodePool
         spec:
           type: object
           additionalProperties: {}
@@ -1183,6 +1005,7 @@ components:
                 Note: status.phase provides aggregated view from all adapter conditions.
             observed_generation:
               type: integer
+              format: int32
               description: |-
                 Last generation processed by adapters
                 Updated when adapters report status.
@@ -1209,9 +1032,7 @@ components:
             - last_transition_time
             - updated_at
             - adapters
-    NodepoolCreateRequest:
-      type: object
-    NodepoolUpdateRequest:
+    NodePoollCreateRequest:
       type: object
 servers:
   - url: https://api.hyperfleet.dev.example.com
