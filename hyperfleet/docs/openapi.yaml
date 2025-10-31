@@ -20,7 +20,7 @@ tags:
   - name: Clusters
     description: Cluster resource CRUD operations
 paths:
-  /api/clusters:
+  /api/hyperfleet/v1/clusters:
     get:
       operationId: getClusters
       summary: List clusters
@@ -85,69 +85,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ClusterCreateRequest'
-  /api/clusters/nodepools:
-    get:
-      operationId: getNodePools
-      summary: List all nodepools for cluster
-      description: Returns the list of all nodepools
-      parameters:
-        - $ref: '#/components/parameters/QueryParams.search'
-        - $ref: '#/components/parameters/QueryParams.page'
-        - $ref: '#/components/parameters/QueryParams.pageSize'
-        - $ref: '#/components/parameters/QueryParams.orderBy'
-        - $ref: '#/components/parameters/QueryParams.order'
-      responses:
-        '200':
-          description: The request has succeeded.
-          content:
-            application/json:
-              schema:
-                type: object
-                required:
-                  - page
-                  - size
-                  - total
-                  - items
-                properties:
-                  page:
-                    type: integer
-                    format: int32
-                  size:
-                    type: integer
-                    format: int32
-                  total:
-                    type: integer
-                    format: int32
-                  items:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/NodePool'
-      tags:
-        - NodePools
-  /api/clusters/nodepools/{nodepool_id}:
-    get:
-      operationId: getNodePoolById
-      summary: Get nodepool by ID
-      description: Returns specific nodepool
-      parameters:
-        - name: nodepool_id
-          in: path
-          required: true
-          description: NodePool ID
-          schema:
-            type: string
-      responses:
-        '200':
-          description: The request has succeeded.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NodePool'
-        '404':
-          description: The server cannot find the requested resource.
-      tags:
-        - NodePools
-  /api/clusters/{cluster_id}:
+  /api/hyperfleet/v1/clusters/{cluster_id}:
     get:
       operationId: getClusterById
       summary: Get cluster by ID
@@ -168,7 +106,7 @@ paths:
           description: The server cannot find the requested resource.
       tags:
         - Clusters
-  /api/clusters/{cluster_id}/nodepools:
+  /api/hyperfleet/v1/clusters/{cluster_id}/nodepools:
     get:
       operationId: getNodePoolsByClusterId
       summary: List all nodepools for cluster
@@ -245,7 +183,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/NodePoolCreateRequest'
-  /api/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses:
+  /api/hyperfleet/v1/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses:
     get:
       operationId: getNodePoolsStatuses
       summary: List all adapter statuses for nodepools
@@ -339,7 +277,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AdapterStatusCreateRequest'
-  /api/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses/{status_id}:
+  /api/hyperfleet/v1/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses/{status_id}:
     get:
       operationId: getNodePoolStatusById
       summary: Get adapter status by ID
@@ -373,7 +311,7 @@ paths:
           description: The server cannot find the requested resource.
       tags:
         - NodePool statuses
-  /api/clusters/{cluster_id}/statuses:
+  /api/hyperfleet/v1/clusters/{cluster_id}/statuses:
     get:
       operationId: getClusterStatuses
       summary: List all adapter statuses for cluster
@@ -457,7 +395,7 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AdapterStatusCreateRequest'
-  /api/clusters/{cluster_id}/statuses/{status_id}:
+  /api/hyperfleet/v1/clusters/{cluster_id}/statuses/{status_id}:
     get:
       operationId: getClusterStatusById
       summary: Get adapter status by ID
@@ -486,6 +424,68 @@ paths:
           description: The server cannot find the requested resource.
       tags:
         - Cluster statuses
+  /api/hyperfleet/v1/nodepools:
+    get:
+      operationId: getNodePools
+      summary: List all nodepools for cluster
+      description: Returns the list of all nodepools
+      parameters:
+        - $ref: '#/components/parameters/QueryParams.search'
+        - $ref: '#/components/parameters/QueryParams.page'
+        - $ref: '#/components/parameters/QueryParams.pageSize'
+        - $ref: '#/components/parameters/QueryParams.orderBy'
+        - $ref: '#/components/parameters/QueryParams.order'
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - page
+                  - size
+                  - total
+                  - items
+                properties:
+                  page:
+                    type: integer
+                    format: int32
+                  size:
+                    type: integer
+                    format: int32
+                  total:
+                    type: integer
+                    format: int32
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/NodePool'
+      tags:
+        - NodePools
+  /api/hyperfleet/v1/nodepools/{nodepool_id}:
+    get:
+      operationId: getNodePoolById
+      summary: Get nodepool by ID
+      description: Returns specific nodepool
+      parameters:
+        - name: nodepool_id
+          in: path
+          required: true
+          description: NodePool ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodePool'
+        '404':
+          description: The server cannot find the requested resource.
+      tags:
+        - NodePools
 components:
   parameters:
     QueryParams.order:
@@ -493,7 +493,7 @@ components:
       in: query
       required: false
       schema:
-        type: string
+        $ref: '#/components/schemas/OrderDirection'
         default: desc
       explode: false
     QueryParams.orderBy:
@@ -1177,6 +1177,11 @@ components:
             - last_transition_time
             - updated_at
             - adapters
+    OrderDirection:
+      type: string
+      enum:
+        - asc
+        - desc
 servers:
   - url: https://api.hyperfleet.dev.example.com
     description: Development
