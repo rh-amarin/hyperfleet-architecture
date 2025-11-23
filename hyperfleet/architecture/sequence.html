@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Temporal Sequence Visualizer</title>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    :root {
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      --page-gradient: linear-gradient(180deg, #fdfdfd 0%, #f0f4ff 100%);
+      --text-color: #1f1f1f;
+      --muted-text: #4b5563;
+      --base-font-size: 0.9rem;
+      --heading-size: 1.75rem;
+      --body-padding: 1rem;
+      --table-radius: 16px;
+      --stack-gap: 0.5rem;
+      --block-padding: 0.25rem 0.3rem;
+      --block-radius: 5px;
+      --cell-min-width: 180px;
+      --toc-bg: rgba(255, 255, 255, 0.9);
+      --toc-border: #e5e7eb;
+      --link-color: #1d4ed8;
+      --link-hover: #1e40af;
+      --status-info-bg: #eef2ff;
+      --status-info-text: #312e81;
+      --status-error-bg: #fee2e2;
+      --status-error-text: #7f1d1d;
+      --table-bg: rgba(255, 255, 255, 0.95);
+      --table-shadow: 0 15px 35px rgba(15, 23, 42, 0.08);
+      --cell-border: #e5e7eb;
+      --th-bg: #0f172a;
+      --th-text: #f8fafc;
+      --row-header-bg: #f4f7ff;
+      --cell-bg: #ffffff;
+      --event-border: #c7d2fe;
+      --event-bg: #eef2ff;
+      --event-alt-border: #fed7aa;
+      --event-alt-bg: #fff7ed;
+      --event-text: #1e293b;
+      --detail-text: #334155;
+      --empty-cell: #cbd5f5;
+      --significant-bg: #fef3c7;
+      --significant-text: #92400e;
+      --mono-bg: rgba(15, 23, 42, 0.08);
+      --mono-text: #0f172a;
+      --attention-bg: #fee2e2;
+      --attention-border: #fecaca;
+      --attention-text: #7f1d1d;
+    }
+
+    body {
+      margin: 0;
+      padding: var(--body-padding);
+      min-height: 100vh;
+      background: var(--page-gradient);
+      color: var(--text-color);
+      font-size: var(--base-font-size);
+    }
+
+    #app {
+      width: 100%;
+      color: var(--text-color);
+    }
+
+    h1 {
+      margin: 0 0 0.25rem;
+      font-size: var(--heading-size);
+      font-weight: 400;
+    }
+
+    .meta {
+      font-size: 0.85rem;
+      color: var(--muted-text);
+    }
+
+    .controls {
+      margin: 0.75rem 0;
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      cursor: pointer;
+      font-size: 0.9rem;
+      color: var(--muted-text);
+      gap: 0.5rem;
+    }
+
+    .toggle-input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+      position: absolute;
+    }
+
+    .toggle-track {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      background-color: #ccc;
+      border-radius: 20px;
+      transition: .3s;
+    }
+
+    .toggle-input:checked + .toggle-track {
+      background-color: #2196F3;
+    }
+
+    .toggle-track:before {
+      content: "";
+      position: absolute;
+      height: 16px;
+      width: 16px;
+      left: 2px;
+      bottom: 2px;
+      background-color: white;
+      border-radius: 50%;
+      transition: .3s;
+    }
+
+    .toggle-input:checked + .toggle-track:before {
+      transform: translateX(16px);
+    }
+
+    .toc {
+      margin: 0.5rem 0 1.25rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--toc-border);
+      border-radius: 8px;
+      background: var(--toc-bg);
+    }
+
+    .toc-title {
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted-text);
+      margin-bottom: 0.5rem;
+    }
+
+    .toc-list {
+      margin: 0;
+      padding-left: 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .toc-list a {
+      color: var(--link-color);
+      text-decoration: none;
+    }
+
+    .toc-list a:hover {
+      text-decoration: underline;
+      color: var(--link-hover);
+    }
+
+    .status {
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      margin: 0.5rem 0;
+      font-weight: 400;
+    }
+
+    .status.info {
+      background: var(--status-info-bg);
+      color: var(--status-info-text);
+    }
+
+    .status.error {
+      background: var(--status-error-bg);
+      color: var(--status-error-text);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--table-bg);
+      box-shadow: var(--table-shadow);
+      border-radius: var(--table-radius);
+      overflow: hidden;
+    }
+
+    th,
+    td {
+      border: 1px solid var(--cell-border);
+      padding: 0.5rem;
+      vertical-align: top;
+    }
+
+    thead th {
+      background: var(--th-bg);
+      color: var(--th-text);
+      font-weight: 400;
+      text-align: left;
+    }
+
+    tbody th {
+      background: var(--row-header-bg);
+      width: 90px;
+      font-weight: 400;
+      text-align: left;
+    }
+
+    td {
+      min-width: var(--cell-min-width);
+      background: var(--cell-bg);
+    }
+
+    .event-stack {
+      display: flex;
+      flex-direction: column;
+      gap: var(--stack-gap);
+    }
+
+    .event-block {
+      border-radius: var(--block-radius);
+      border: 1px solid var(--event-border);
+      background: var(--event-bg);
+      padding: var(--block-padding);
+    }
+
+    .event-block:nth-child(even) {
+      border-color: var(--event-alt-border);
+      background: var(--event-alt-bg);
+    }
+
+    .event-main {
+      font-weight: 400;
+      color: var(--event-text);
+      margin-bottom: 0.2rem;
+    }
+
+    .event-details {
+      margin: 0;
+      padding-left: 1rem;
+      color: var(--detail-text);
+      font-size: 0.9rem;
+    }
+
+    .event-details li {
+      margin: 0.2rem 0;
+    }
+
+    .empty-cell {
+      color: var(--empty-cell);
+      font-size: 1.2rem;
+    }
+
+    .significant-row td {
+      background: var(--significant-bg);
+      color: var(--significant-text);
+      font-weight: 400;
+      font-size: 0.95rem;
+      letter-spacing: 0.01em;
+    }
+
+    .significant-label {
+      display: block;
+      text-transform: uppercase;
+      font-weight: 400;
+      text-align: center;
+    }
+
+    .kv-tag {
+      font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+      background: var(--mono-bg);
+      border-radius: 4px;
+      padding: 0.05rem 0.35rem;
+      font-size: 0.85em;
+      letter-spacing: 0.02em;
+      display: inline-block;
+      color: var(--mono-text);
+    }
+
+    .event-block.attention-block {
+      background: var(--attention-bg);
+      border-color: var(--attention-border);
+    }
+
+    .attention-text {
+      color: var(--attention-text);
+    }
+
+
+    body[data-theme="dark"] {
+      --page-gradient: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+      --text-color: #f1f5f9;
+      --muted-text: #94a3b8;
+      --toc-bg: rgba(30, 41, 59, 0.6);
+      --toc-border: #334155;
+      --link-color: #60a5fa;
+      --link-hover: #93c5fd;
+      --status-info-bg: rgba(59, 130, 246, 0.15);
+      --status-info-text: #93c5fd;
+      --status-error-bg: rgba(239, 68, 68, 0.15);
+      --status-error-text: #fca5a5;
+      --table-bg: #1e293b;
+      --table-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      --cell-border: #334155;
+      --th-bg: #0f172a;
+      --th-text: #f8fafc;
+      --row-header-bg: #1e293b;
+      --cell-bg: #1e293b;
+      --event-border: #475569;
+      --event-bg: #334155;
+      --event-alt-border: #4b5563;
+      --event-alt-bg: #1f2937;
+      --event-text: #e2e8f0;
+      --detail-text: #cbd5f5;
+      --empty-cell: #475569;
+      --significant-bg: rgba(234, 179, 8, 0.15);
+      --significant-text: #fde047;
+      --mono-bg: rgba(0, 0, 0, 0.3);
+      --mono-text: #e2e8f0;
+      --attention-bg: rgba(239, 68, 68, 0.2);
+      --attention-border: #ef4444;
+      --attention-text: #fca5a5;
+    }
+
+
+
+
+
+
+    @media (max-width: 900px) {
+      table,
+      thead,
+      tbody,
+      th,
+      td,
+      tr {
+        font-size: 0.85rem;
+      }
+
+      td {
+        min-width: 140px;
+      }
+    }
+  </style>
+</head>
+<body data-theme="light">
+  <div id="app">
+    <header>
+      <h1 v-if="!error">{{ title || 'Sequence visualizer' }}</h1>
+      <div class="meta">
+        <span>Source: {{ sourceUrl || '(provide ?src=...)' }}</span>
+      </div>
+    </header>
+
+    <div class="controls">
+      <label class="toggle-switch">
+        <span>Dark Mode</span>
+        <input type="checkbox" class="toggle-input" :checked="themeId === 'dark'" @change="toggleTheme">
+        <span class="toggle-track"></span>
+      </label>
+    </div>
+
+    <nav v-if="significantEvents.length" class="toc">
+      <div class="toc-title">Significant events</div>
+      <ol class="toc-list">
+        <li v-for="event in significantEvents" :key="event.anchorId">
+          <a :href="'#' + event.anchorId">{{ event.label }}</a>
+        </li>
+      </ol>
+    </nav>
+
+    <div v-if="loading" class="status info">Loading sequence...</div>
+    <div v-else-if="error" class="status error">{{ error }}</div>
+
+    <main v-if="!loading && !error">
+      <table v-if="rows.length">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th v-for="component in components" :key="component">{{ component }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="(row, rowIdx) in rows" :key="row.key">
+            <tr v-if="row.kind === 'time'">
+              <th>{{ row.time }}</th>
+              <td v-for="cell in row.cells" :key="cell.component">
+                <div v-if="cell.blocks.length" class="event-stack">
+                  <div
+                    v-for="(block, idx) in cell.blocks"
+                    :key="idx"
+                    :class="['event-block', { 'attention-block': blockNeedsAttention(block) }]"
+                  >
+                    <div
+                      class="event-main"
+                      :class="{ 'attention-text': containsDiscussionMarker(block.text) }"
+                      v-html="formatText(block.text)"
+                    ></div>
+                    <ul v-if="block.details.length" class="event-details">
+                      <li
+                        v-for="(detail, dIdx) in block.details"
+                        :key="dIdx"
+                        :class="{ 'attention-text': containsDiscussionMarker(detail) }"
+                        v-html="formatText(detail)"
+                      ></li>
+                    </ul>
+                  </div>
+                </div>
+                <span v-else class="empty-cell">—</span>
+              </td>
+            </tr>
+            <tr v-else class="significant-row" :id="row.anchorId">
+              <td :colspan="components.length + 1">
+                <span
+                  class="significant-label"
+                  :class="{ 'attention-text': containsDiscussionMarker(row.label) }"
+                  v-html="formatText(row.label)"
+                ></span>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+      <p v-else>No events were found in the provided source.</p>
+    </main>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+
+    createApp({
+      data() {
+        return {
+          title: '',
+          rows: [],
+          components: [],
+          significantEvents: [],
+          themeId: 'light',
+          loading: true,
+          error: '',
+          sourceUrl: ''
+        };
+      },
+      watch: {
+        themeId() {
+          this.applyTheme();
+        }
+      },
+      methods: {
+        async loadData() {
+          const params = new URLSearchParams(window.location.search);
+          const src = params.get('src') || 'sequence.md';
+          this.sourceUrl = src;
+
+          try {
+            const response = await fetch(src);
+            if (!response.ok) {
+              throw new Error(`Request failed (${response.status})`);
+            }
+
+            const text = await response.text();
+            const parsed = this.parseMarkdown(text);
+            this.title = parsed.title || 'Untitled sequence';
+            this.components = parsed.components;
+            this.rows = parsed.rows;
+            this.significantEvents = parsed.significantEvents;
+          } catch (err) {
+            this.error = err.message || 'Unable to load the provided source.';
+          } finally {
+            this.loading = false;
+          }
+        },
+        parseMarkdown(text) {
+          const lines = text.split(/\r?\n/);
+          let title = '';
+          const componentOrder = [];
+          const componentIndex = new Map();
+          const timeline = new Map();
+          const orderedRows = [];
+          const significantEvents = [];
+          let lastBlock = null;
+          let lastComponent = null;
+          let sigCounter = 0;
+
+          const verbs = [
+            'creates',
+            'polls',
+            'publishes',
+            'sees',
+            'receives',
+            'fetches',
+            'checks',
+            'reports',
+            'stores',
+            'dispatches',
+            'sends',
+            'generates',
+            'updates',
+            'computes',
+            'applies',
+            'confirms',
+            'validates',
+            'waits',
+            'starts',
+            'stops'
+          ];
+          const verbRegex = new RegExp(`\\b(${verbs.join('|')})\\b`, 'i');
+
+          const ensureComponent = (rawName) => {
+            const name = rawName && rawName.trim().length ? rawName.trim() : 'Unassigned';
+            if (!componentIndex.has(name)) {
+              componentIndex.set(name, componentOrder.length);
+              componentOrder.push(name);
+            }
+            return name;
+          };
+
+          const ensureRow = (time) => {
+            if (!timeline.has(time)) {
+              timeline.set(time, { components: new Map() });
+              orderedRows.push({ type: 'time', time, key: `time-${time}` });
+            }
+            return timeline.get(time);
+          };
+
+          const timeLineRegex = /^\s*(\d{2}:\d{2})\s*-\s*(.+)$/;
+
+          for (const rawLine of lines) {
+            const line = rawLine;
+            const trimmed = line.trim();
+
+            if (!title && trimmed.startsWith('# ')) {
+              title = trimmed.replace(/^#\s*/, '').trim();
+              continue;
+            }
+
+            if (!trimmed) {
+              continue;
+            }
+
+            if (trimmed.startsWith('---')) {
+              const label = trimmed.replace(/^---+\s*/, '').trim() || 'Significant event';
+              const anchorId = `sig-${sigCounter++}`;
+              orderedRows.push({
+                type: 'significant',
+                label,
+                key: anchorId,
+                anchorId
+              });
+              significantEvents.push({ label, anchorId });
+              lastBlock = null;
+              lastComponent = null;
+              continue;
+            }
+
+            const match = line.match(timeLineRegex);
+            if (match) {
+              const time = match[1];
+              const remainder = match[2].trim();
+
+              let component = '';
+              let action = remainder;
+              const verbMatch = remainder.match(verbRegex);
+              const firstVerbIndex =
+                verbMatch && verbMatch.index !== undefined ? verbMatch.index : -1;
+
+              const colonIndex = remainder.indexOf(':');
+              if (
+                colonIndex !== -1 &&
+                (firstVerbIndex === -1 || colonIndex < firstVerbIndex)
+              ) {
+                component = remainder.slice(0, colonIndex).trim();
+                action = remainder.slice(colonIndex + 1).trim();
+              } else {
+                const explicitSep = remainder.indexOf(' - ');
+                if (explicitSep !== -1) {
+                  component = remainder.slice(0, explicitSep).trim();
+                  action = remainder.slice(explicitSep + 3).trim();
+                } else if (firstVerbIndex > 0) {
+                  component = remainder.slice(0, firstVerbIndex).trim();
+                  action = remainder.slice(firstVerbIndex).trim();
+                }
+              }
+
+              const normalizedComponent = ensureComponent(component);
+              const row = ensureRow(time);
+              if (!row.components.has(normalizedComponent)) {
+                row.components.set(normalizedComponent, []);
+              }
+
+              const block = { text: action, details: [] };
+              row.components.get(normalizedComponent).push(block);
+
+              lastBlock = block;
+              lastComponent = normalizedComponent;
+              continue;
+            }
+
+            const detail = trimmed.replace(/^-+\s*/, '').trim();
+            if (detail && lastBlock) {
+              lastBlock.details.push(detail);
+            }
+          }
+
+          const rows = orderedRows.map((entry) => {
+            if (entry.type === 'significant') {
+              return {
+                kind: 'significant',
+                label: entry.label,
+                key: entry.key,
+                anchorId: entry.anchorId
+              };
+            }
+            const row = timeline.get(entry.time);
+            const cells = componentOrder.map((component) => {
+              const blocks = row?.components.get(component) || [];
+              return { component, blocks };
+            });
+            return { kind: 'time', time: entry.time, key: entry.key, cells };
+          });
+
+          return {
+            title,
+            components: componentOrder,
+            rows,
+            significantEvents
+          };
+        },
+        toggleTheme(e) {
+          this.themeId = e.target.checked ? 'dark' : 'light';
+        },
+        applyTheme() {
+          document.body.setAttribute('data-theme', this.themeId);
+        },
+        formatText(value) {
+          if (!value) {
+            return '';
+          }
+          const escapeHtml = (str) =>
+            str
+              .replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#39;');
+
+          const kvRegex = /\b([\w.-]+)=([\w.:/-]+)\b/g;
+          const escaped = escapeHtml(String(value));
+          return escaped.replace(kvRegex, (_match, key, val) => {
+            return `<span class="kv-tag">${key}=${val}</span>`;
+          });
+        },
+        containsDiscussionMarker(value) {
+          return typeof value === 'string' && value.includes('???');
+        },
+        blockNeedsAttention(block) {
+          if (!block) {
+            return false;
+          }
+          if (this.containsDiscussionMarker(block.text)) {
+            return true;
+          }
+          return block.details.some((detail) => this.containsDiscussionMarker(detail));
+        }
+      },
+      mounted() {
+        this.loadData();
+        this.applyTheme();
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
+
+
