@@ -155,7 +155,7 @@ Not all HyperFleet repositories build binaries. Helm-chart and deployment reposi
 
 | Type | Description | Examples |
 |------|-------------|----------|
-| **Service** | Repositories that compile Go binaries | adapter-pullsecret, adapter-dns, sentinel |
+| **Service** | Repositories that compile Go binaries | adapter-pullsecret, sentinel |
 | **Helm-chart** | Repositories containing only Helm charts for deployment | adapter-landing-zone |
 | **Infrastructure** | Repositories with infrastructure-as-code (Terraform, scripts) | hyperfleet-infrastructure |
 | **Documentation** | Repositories containing only documentation (Makefile not required) | hyperfleet-architecture |
@@ -166,7 +166,7 @@ Helm-chart repositories do not build binaries, so the standard required targets 
 
 | Standard Target | Helm-chart Equivalent | Notes |
 |-----------------|----------------------|-------|
-| `build` | N/A | No binaries to build; target may be omitted |
+| `build` | N/A | No binaries to build; not applicable for Helm-chart repositories |
 | `test` | `helm-test` | Runs `helm-lint` + `helm-template` validation |
 | `lint` | `helm-lint` | Validates chart syntax and best practices |
 | `clean` | `helm-uninstall` or N/A | Removes installed releases; may be omitted if not applicable |
@@ -174,13 +174,13 @@ Helm-chart repositories do not build binaries, so the standard required targets 
 
 ### Repository Type Indicator
 
-To help tooling identify repository types, repositories **SHOULD** include a `.hyperfleet.yaml` file in the root directory:
+To help tooling identify repository types, repositories **SHOULD** include a `.hyperfleet.yaml` file in the root directory. This file is preferred over GitHub Topics because it works offline, is version-controlled, and supports structured metadata:
 
 ```yaml
 # .hyperfleet.yaml - Repository metadata for HyperFleet tooling
 version: v1
 repository:
-  type: helm-chart  # One of: service, helm-chart, infrastructure, documentation
+  type: helm-chart  # Repository build artifact type (see Repository Types table above)
   name: adapter-landing-zone
   description: Helm charts for adapter deployment landing zone
 ```
