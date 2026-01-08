@@ -62,7 +62,8 @@ All HyperFleet repositories **MUST** implement these targets:
 | `lint` | Run linters | Execute configured linters (golangci-lint, yamllint, etc.) | Linting violations or success |
 | `clean` | Remove build artifacts | Delete all generated files (binaries, coverage, build cache) | Empty `bin/`, `build/` directories |
 
-**Example invocation:**
+### Example invocation
+
 ```bash
 make help           # See all available targets
 make build          # Compile binaries
@@ -88,7 +89,8 @@ Repositories **MAY** implement these targets if applicable:
 | `deploy` | Deploy to environment | If repo has deployment logic | Deploy to dev/staging |
 | `run` | Run the application locally | For services that can run standalone | Start local server |
 
-**Example invocation:**
+### Example invocation
+
 ```bash
 make generate                   # Generate code from specs
 make test-all                   # Run all tests and checks (recommended before commit)
@@ -185,7 +187,7 @@ repository:
   description: Helm charts for adapter deployment landing zone
 ```
 
-**Supported repository types:**
+### Supported repository types
 
 | Type | Value | Required Targets |
 |------|-------|------------------|
@@ -208,7 +210,7 @@ The standards-audit tool recognizes repository type variations:
 
 > **Note:** Targets are additive. The repository types define the **minimum required targets**. A repository with multiple types must include the required targets for each type.
 
-**Example: Service repository with Helm charts**
+### Example: Service repository with Helm charts
 
 A repository that builds binaries and also contains Helm charts would declare both types:
 
@@ -235,7 +237,7 @@ helm-template:  ## Render Helm templates
 helm-test:      ## Run Helm tests
 ```
 
-**Example audit output for Helm-chart repository:**
+### Example audit output for Helm-chart repository
 
 ```plaintext
 Repository: adapter-landing-zone
