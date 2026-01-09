@@ -194,7 +194,8 @@ func (w *Worker) Start(ctx context.Context) {
 
 ## Kubernetes Integration
 
-Deployments MUST configure `terminationGracePeriodSeconds` to allow time for graceful shutdown:
+Deployments CAN configure `terminationGracePeriodSeconds` to allow time for graceful shutdown. By [default](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination-flow) Kubernetes defines `30` seconds as the termination grace period.
+
 
 ```yaml
 spec:
