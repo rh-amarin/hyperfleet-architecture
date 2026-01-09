@@ -12,14 +12,19 @@
 
 This spike report evaluates E2E testing frameworks for **Hyperfleet's core data flow**—testing the end-to-end pipeline: Hyperfleet API → Sentinel → Message Broker → Adapters → back to API.
 
-**Decision: Ginkgo v2 + Markdown Documentation**
+**✅ Decision: Ginkgo v2 + Gomega + Markdown Documentation**
 
-After evaluating Ginkgo v2, Godog, and Testify across seven dimensions, we select **Ginkgo v2** because it excels in:
-- **Reliability & Flakiness Prevention**: Built-in async testing (`Eventually`/`Consistently`) prevents flaky tests in distributed systems
+After evaluating Ginkgo v2, Godog, and Testify across seven dimensions, we select **Ginkgo v2 + Gomega** because this combination excels in:
+- **Reliability & Flakiness Prevention**: Gomega's built-in async testing (`Eventually`/`Consistently`) prevents flaky tests in distributed systems
 - **AI-Assisted Development**: Pure Go optimizes LLM-driven test generation, maintenance, and debugging
 - **Maturity & Ecosystem**: Large community, widely adopted, strong long-term support
 
-We mitigate Ginkgo's documentation drift risk through AI-powered validation and CI checks (detailed in Section 2.3).
+**What This Means:**
+- **Ginkgo v2**: BDD-style test framework providing test organization, labels, parallel execution, and lifecycle hooks
+- **Gomega**: Assertion library with expressive matchers and async testing primitives
+- **Markdown**: Documentation format for test scenarios, linked to code via AI-Sync-ID metadata
+
+We mitigate documentation drift risk through AI-powered validation and CI checks (detailed in Section 2.3).
 
 **Scope**: This framework tests our core data flow architecture. Provider-specific adapter implementations (validation, DNS, etc.) are **out of scope** and should have dedicated stories. 
 
@@ -72,12 +77,12 @@ Three candidate frameworks were evaluated—**Ginkgo v2**, **Godog**, and **Test
 
 ### 2.2 Framework Comparison
 
-| Criteria | Ginkgo v2 | Godog | Testify |
+| Criteria | Ginkgo v2 + Gomega | Godog | Testify |
 |----------|-----------|-------|---------|
-| **Integration & Setup** | ⭐⭐⭐⭐⭐ Standard Go, zero dependencies | ⭐⭐⭐☆☆ Requires Godog runner + feature files | ⭐⭐⭐⭐⭐ Standard Go test |
+| **Integration & Setup** | ⭐⭐⭐⭐⭐ Standard Go, minimal dependencies | ⭐⭐⭐☆☆ Requires Godog runner + feature files | ⭐⭐⭐⭐⭐ Standard Go test |
 | **Test Organization & Execution** | ⭐⭐⭐⭐⭐ Labels, hierarchical, parallel | ⭐⭐⭐⭐☆ Tags, scenarios, serial by default | ⭐⭐☆☆☆ Flat, name-based |
 | **Documentation & Communication** | ⭐⭐⭐☆☆ Requires separate Markdown docs | ⭐⭐⭐⭐⭐ Executable specs, zero drift | ⭐⭐☆☆☆ Code-only |
-| **Reliability & Flakiness Prevention** | ⭐⭐⭐⭐⭐ Eventually/Consistently, automatic retry | ⭐⭐☆☆☆ Manual polling with custom logic | ⭐⭐☆☆☆ Manual implementation |
+| **Reliability & Flakiness Prevention** | ⭐⭐⭐⭐⭐ Gomega's Eventually/Consistently, automatic retry | ⭐⭐☆☆☆ Manual polling with custom logic | ⭐⭐☆☆☆ Manual implementation |
 | **AI-Assisted Development** | ⭐⭐⭐⭐⭐ Single language, direct debugging | ⭐⭐⭐☆☆ Two languages, higher token cost | ⭐⭐⭐⭐☆ Simple but limited |
 | **Maturity & Ecosystem** | ⭐⭐⭐⭐⭐ Large community, widely adopted | ⭐⭐⭐☆☆ Smaller community, growing | ⭐⭐⭐⭐☆ Mature, simpler scope |
 | **Long-term Maintainability** | ⭐⭐⭐⭐☆ Doc drift risk, strong tooling | ⭐⭐⭐⭐☆ Two files to maintain, clear intent | ⭐⭐⭐☆☆ Limited structure |
@@ -86,22 +91,34 @@ Three candidate frameworks were evaluated—**Ginkgo v2**, **Godog**, and **Test
 
 | Framework | Strengths | Weaknesses |
 |-----------|-----------|------------|
-| **Ginkgo v2** | • Built-in async testing (`Eventually`/`Consistently`)<br>• Pure Go (AI-friendly, single language)<br>• Rich organization (labels, parallel, ordered) | • Separate docs (drift risk)<br>• Less accessible to non-developers |
+| **Ginkgo v2 + Gomega** | • Gomega's async testing (`Eventually`/`Consistently`)<br>• Pure Go (AI-friendly, single language)<br>• Rich organization (labels, parallel, ordered)<br>• Expressive matchers for clear assertions | • Separate docs (drift risk)<br>• Less accessible to non-developers |
 | **Godog** | • Executable specs (zero drift by design)<br>• Readable by non-developers<br>• Industry-standard Gherkin | • Manual async patterns<br>• Two-file system overhead<br>• Less AI-optimal (context switching) |
 
-**Decision: Ginkgo v2**
+**✅ Decision: Ginkgo v2 + Gomega + Markdown**
 
-For Hyperfleet E2E testing, we prioritize **reliability** (robust async testing) and **development velocity** (AI-assisted workflows) over executable documentation. Meanwhile, we mitigate doc drift through AI-powered validation (Section 2.3).
+For Hyperfleet E2E testing, we prioritize **reliability** (Gomega's robust async testing) and **development velocity** (AI-assisted workflows with pure Go) over executable documentation. Meanwhile, we mitigate doc drift through AI-powered validation (Section 2.3).
+
+**Note:** Ginkgo v2 and Gomega are designed to work together—Ginkgo provides the test framework structure while Gomega provides the assertion library with async testing capabilities.
 
 *See Appendix A for detailed framework evaluations.*
 
-### 2.3 Implementation: Ginkgo v2 + Markdown Documentation
+### 2.3 Implementation: Ginkgo v2 + Gomega + Markdown Documentation
 
-The Hyperfleet E2E testing framework uses **Ginkgo v2** with **Markdown documentation**. This section details implementation patterns and how we address documentation drift.
+**This is our chosen approach.** The Hyperfleet E2E testing framework uses **Ginkgo v2** (test framework) with **Gomega** (assertion library) and **Markdown documentation**. 
+
+**Why This Combination:**
+- **Ginkgo v2**: Provides BDD-style test organization, label-based filtering, parallel execution, and powerful lifecycle hooks
+- **Gomega**: Offers rich, expressive matchers and built-in async testing (`Eventually`/`Consistently`) for distributed systems
+- **Markdown**: Flexible documentation format supporting diagrams, code samples, and rich formatting beyond Gherkin limitations
+
+This section details implementation patterns and how we address documentation drift.
 
 #### 2.3.1 Reliability & Flakiness Prevention
 
 Distributed E2E testing requires robust async handling. Ginkgo's built-in patterns eliminate entire classes of flaky tests:
+
+<details>
+<summary>Ginkgo Async Testing Patterns (click to expand)</summary>
 
 ```go
 // Eventual consistency - polls until condition met or timeout
@@ -134,6 +151,8 @@ AfterEach(func() {
 })
 ```
 
+</details>
+
 
 #### 2.3.2 AI-Assisted Development
 
@@ -143,10 +162,12 @@ AfterEach(func() {
 
 #### 2.3.3 Test Organization
 
+<summary>Test Organization Patterns (click to expand)</summary>
+
 **Label-based filtering:**
 ```bash
-ginkgo --label-filter="smoke && gcp"      # Smoke tests for Kafka
-ginkgo --label-filter="critical && !day2"    # Critical excluding SQS
+ginkgo --label-filter="smoke && gcp"      # Smoke tests for GCP
+ginkgo --label-filter="critical && !day2"    # Critical excluding day2
 ```
 
 **Ordered execution with shared setup:**
@@ -178,9 +199,7 @@ Describe("Nodepool", Ordered, func() {
 
 2. **AI-powered validation**: LLMs verify sync by scanning AI-Sync-IDs, detect drift
 
-3. **CI enforcement**: Automated checks catch missing implementations or orphaned docs
-
-4. **Markdown advantages**: Supports diagrams, links, embedded content beyond Gherkin's limitations
+3. **Markdown advantages**: Supports diagrams, links, embedded content beyond Gherkin's limitations
 
 #### 2.3.5 Test Case Structure
 **Example:**
@@ -200,6 +219,189 @@ var _ = Describe("End-to-End Data Flow", Label("E2E-FLOW-001", "critical"), func
     // Test implementation
 })
 ```
+
+#### 2.3.6 Complete Example Implementation
+<details>
+<summary>Complete Ginkgo + Gomega + Markdown Test Example (click to expand)</summary>
+
+**Part 1: Markdown Documentation**
+
+```markdown
+# scenarios/data_flow.md
+
+## Scenario: End-to-End Data Flow Validation
+
+**AI-Sync-ID:** E2E-FLOW-001  
+**Priority:** Critical  
+**Labels:** data-flow, framework, critical
+
+### Purpose
+Validate the complete data flow from API to adapter and back, ensuring framework components work together correctly.
+
+### Prerequisites
+- The Hyperfleet API is available
+- Sentinel is running and polling
+- The message broker is healthy
+- At least one adapter is deployed
+
+### Test Steps
+
+1. **Create Object via API**
+   - Create an object with name "test-object-1" and type "ClusterRequest"
+   - Verify creation succeeds and returns a valid object ID
+
+2. **Verifying adapter reports status back to API**
+   - Expected: Adapter consumes topic within 2 minutes
+   - Expected: Adapter reports status back to API
+
+5. **Verify Complete Flow**
+   - Poll object status periodically
+   - Expected: Object reaches "READY" state within 10 minutes
+
+6. **Verify State Consistency**
+   - Ensure final state remains stable
+   - Expected: State consistently stays "COMPLETED"
+
+### Cleanup
+- Delete the created object
+- Verify deletion completes successfully
+```
+
+**Part 2: Go Test Implementation**
+
+```go
+// tests/data_flow_test.go
+package tests
+
+import (
+    "context"
+    "time"
+
+    . "github.com/onsi/ginkgo/v2"
+    . "github.com/onsi/gomega"
+    
+    "hyperfleet-e2e/pkg/clients"
+)
+
+// @AI-Sync-ID: E2E-FLOW-001
+var _ = Describe("End-to-End Data Flow Validation", Label("data-flow", "framework", "critical", "E2E-FLOW-001"), func() {
+    var (
+        ctx              context.Context
+        apiClient        *clients.APIClient
+        sentinelClient   *clients.SentinelClient
+        brokerClient     *clients.BrokerClient
+        adapterClient    *clients.AdapterClient
+        createdObjectID  string
+        createdObject    *clients.Object
+    )
+
+    // BeforeEach verifies all prerequisites before running tests
+    BeforeEach(func() {
+        ctx = context.Background()
+        
+        // Initialize clients
+        apiClient = clients.NewAPIClient(cfg.APIEndpoint, cfg.APIToken)
+        sentinelClient = clients.NewSentinelClient(cfg.SentinelEndpoint)
+        brokerClient = clients.NewBrokerClient(cfg.BrokerEndpoint)
+        adapterClient = clients.NewAdapterClient(cfg.AdapterEndpoint)
+        
+        GinkgoWriter.Println("Verifying system prerequisites...")
+        
+        // Verify: Hyperfleet API is available
+        Eventually(func() error {
+            return apiClient.HealthCheck(ctx)
+        }, 30*time.Second, 2*time.Second).Should(Succeed(), "API should be healthy")
+        
+        // Verify: Sentinel is running and polling
+        Eventually(func() bool {
+            status, err := sentinelClient.GetStatus(ctx)
+            return err == nil && status.IsRunning
+        }, 30*time.Second, 2*time.Second).Should(BeTrue(), "Sentinel should be running")
+        
+        // Verify: Message broker is healthy
+        Expect(brokerClient.IsHealthy(ctx)).To(BeTrue(), "Message broker should be healthy")
+        
+        // Verify: At least one adapter is deployed
+        adapters, err := adapterClient.ListAdapters(ctx)
+        Expect(err).NotTo(HaveOccurred(), "Should be able to list adapters")
+        Expect(adapters).NotTo(BeEmpty(), "At least one adapter should be deployed")
+        
+        GinkgoWriter.Println("✓ All prerequisites verified")
+    })
+
+    // AfterEach handles cleanup with idempotent operations
+    AfterEach(func() {
+        defer GinkgoRecover()
+        
+        if createdObjectID != "" {
+            GinkgoWriter.Printf("Cleaning up object: %s\n", createdObjectID)
+            _ = apiClient.DeleteObject(ctx, createdObjectID)
+            
+            // Verify deletion completes successfully
+            Eventually(func() bool {
+                _, err := apiClient.GetObject(ctx, createdObjectID)
+                return err != nil && clients.IsNotFoundError(err)
+            }, 5*time.Minute, 10*time.Second).Should(BeTrue())
+            
+            GinkgoWriter.Println("✓ Cleanup completed")
+        }
+    })
+
+    It("should complete full data flow from API to adapter and back", func() {
+        By("creating an object via the API")
+        var err error
+        createdObject, err = apiClient.CreateObject(ctx, &clients.CreateObjectRequest{
+            Name: "test-object-1",
+            Type: "ClusterRequest",
+        })
+        Expect(err).NotTo(HaveOccurred(), "Object creation should succeed")
+        Expect(createdObject).NotTo(BeNil())
+        Expect(createdObject.ID).NotTo(BeEmpty(), "Object should have a valid ID")
+        createdObjectID = createdObject.ID
+        GinkgoWriter.Printf("✓ Created object with ID: %s\n", createdObjectID)
+
+        By("verifying adapter reports status back to API")
+        Eventually(func() bool {
+            status, err := apiClient.GetObjectStatus(ctx, createdObjectID)
+            if err != nil {
+                GinkgoWriter.Printf("Error getting object status: %v\n", err)
+                return false
+            }
+            return status.LastUpdatedBy == "adapter" && status.State = "Available"
+        }, 2*time.Minute, 10*time.Second).Should(BeTrue(),
+            "Adapter should report status to API")
+
+        // Step 5: Verify complete flow
+        By("polling object status until completion")
+        Eventually(func() string {
+            status, err := apiClient.GetObjectStatus(ctx, createdObjectID)
+            if err != nil {
+                GinkgoWriter.Printf("Error getting object status: %v\n", err)
+                return ""
+            }
+            GinkgoWriter.Printf("Object state: %s (updated: %v)\n", 
+                status.State, status.LastUpdated)
+            return status.State
+        }, 10*time.Minute, 15*time.Second).Should(Equal("READY"),
+            "Object should reach READY state within 10 minutes")
+        GinkgoWriter.Printf("✓ Complete data flow validated for object: %s\n", createdObjectID)
+        
+        // Step 6: Verify state consistency (If needed)
+        By("verifying final state consistency")
+        Consistently(func() string {
+            status, err := apiClient.GetObjectStatus(ctx, createdObjectID)
+            if err != nil {
+                return ""
+            }
+            return status.State
+        }, 30*time.Second, 5*time.Second).Should(Equal("READY"),
+            "Object state should remain stable")
+        GinkgoWriter.Println("✓ Final state is consistent")
+    })
+})
+```
+
+</details>
 
 ---
 
@@ -272,6 +474,9 @@ An alternative approach using Ginkgo v2 as the test runner with Godog (Gherkin) 
 - **Maintenance:** Additional step definition layer to maintain and keep in sync
 
 **Example Implementation:**
+
+<details>
+<summary>Complete Godog (Gherkin) Test Example (click to expand)</summary>
 
 ```gherkin
 # scenarios/data_flow.feature
@@ -445,6 +650,8 @@ func registerFeatureTests() {
     }
 }
 ```
+
+</details>
 
 **Verdict:** While technically sound, Godog prioritizes auditability over development velocity. The Ginkgo + Markdown approach achieves similar traceability with better AI integration and developer experience.
 
