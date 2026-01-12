@@ -300,117 +300,33 @@ This section outlines the implementation roadmap following this spike report. Ta
 #### 4.1.1 Initialize HyperFleet E2E Automation Framework
 **Objective:** Establish the base testing infrastructure with Ginkgo v2 + Gomega.
 
-**Tasks:**
-- Set up project structure (`tests/`, `scenarios/`, `clients/`, `utils/`)
-- Initialize Ginkgo v2 test suite with proper configuration
-- Configure Gomega matchers and async testing primitives
-- Implement shared test fixtures and helper utilities
-- Create environment configuration management (dev, staging, production)
-- Establish logging and reporting mechanisms
-
-**Deliverables:**
-- Runnable test suite skeleton with sample smoke test
-- CI-ready configuration files
-- Documentation for local test execution
+**Related Ticket:** HYPERFLEET-486
 
 #### 4.1.2 Update E2E Testing Image Dockerfile for Optimized Build
 **Objective:** Create containerized test execution environment.
 
-**Tasks:**
-- Design multi-stage Dockerfile for efficient builds
-- Include Ginkgo CLI, Go toolchain, and required dependencies
-- Optimize image layers for CI caching
-- Add health check and entrypoint scripts
-- Configure non-root user for security compliance
-- Set up image versioning and tagging strategy
-
-**Deliverables:**
-- Production-ready Dockerfile with build instructions
-- Container image published to registry
+**Related Ticket:** HYPERFLEET-487
 
 ### 4.2 Phase 2: Core Test Implementation
 
 #### 4.2.1 Automate Cluster Creation Test Case with Status Validation
 **Objective:** Validate end-to-end cluster creation flow through the data pipeline.
 
-**Test Coverage:**
-- API accepts cluster creation request and returns valid ID
-- Sentinel detects cluster object and creates broker topic
-- Message broker propagates cluster creation event
-- Adapter consumes event and initiates cluster provisioning
-- Cluster status transitions through expected states (PENDING → PROVISIONING → READY)
-- API reflects accurate status updates from adapter
-
-**Implementation:**
-- Create Markdown test case documentation with AI-Sync-ID
-- Implement Ginkgo test with labels (`cluster`, `critical`, `data-flow`)
-- Use `Eventually` for async status polling with appropriate timeouts
-- Add cleanup logic in `AfterEach` for test isolation
-- Validate error handling for failure scenarios
-
-**Deliverables:**
-- `scenarios/cluster_creation.md` documentation
-- `tests/cluster_creation_test.go` implementation
-- Passing test execution with clean teardown
+**Related Ticket:** HYPERFLEET-490
 
 #### 4.2.2 Automate Nodepool Creation Test Case with Status Validation
 **Objective:** Validate nodepool creation as dependent resource within cluster lifecycle.
 
-**Test Coverage:**
-- Nodepool creation succeeds only after cluster is READY
-- Data flow validation (API → Sentinel → Broker → Adapter → API)
-- Nodepool status transitions (PENDING → CREATING → READY)
-- Nodepool scaling operations (optional Day 2 operation)
-
-**Implementation:**
-- Implement shared `BeforeAll` for cluster creation
-- Test nodepool creation with proper dependency validation
-- Verify broker topic creation for nodepool events
-- Add status validation with configurable timeouts
-
-**Deliverables:**
-- `scenarios/nodepool_creation.md` documentation
-- `tests/nodepool_creation_test.go` implementation
-- Integration with cluster lifecycle tests
+**Related Ticket:** HYPERFLEET-491
 
 ### 4.3 Phase 3: CI/CD Integration
 
 #### 4.3.1 Update Prow E2E Testing Step with Real Test Execution
 **Objective:** Integrate E2E tests into Prow CI pipeline for automated validation.
 
-**Tasks:**
-- Configure Prow job definitions for E2E test execution in public repository
-- Set up test environment provisioning in CI
-- Implement label-based test filtering for PR vs. periodic jobs
-- Configure JUnit XML output for Sippy compatibility
-- Add timeout and retry policies for flaky infrastructure
-- Set up test result publishing to Sippy
-- Configure notifications for test failures
+**Related Ticket:** HYPERFLEET-488
 
-**Deliverables:**
-- Prow job configurations for pull requests and periodic runs
-- Test results published to Sippy dashboard
-- JUnit XML artifacts for result analysis
-- Documentation for triggering and debugging CI test failures
-
-#### 4.3.2 Integrate Sippy to Provide Dashboards for the CI Test/Job Data
-**Objective:** Set up Sippy dashboards to visualize E2E test results, track test health, and identify flaky tests.
-
-**Tasks:**
-- Configure Sippy to consume JUnit XML test results from Prow jobs
-- Set up dashboard views for test pass/fail rates and trends
-- Create custom dashboards for Hyperfleet-specific test suites
-- Set up alerts for test health degradation
-- Configure historical data retention and analysis
-- Document dashboard access and interpretation for team members
-
-**Deliverables:**
-- Sippy dashboard displaying Hyperfleet E2E test results
-- Test health metrics and regression tracking
-- User guide for interpreting Sippy dashboards
-- Alert configurations for critical test failures
-
-### 4.4 Phase 4: Documentation Standards and AI Validation
+### 4.4 Phase 4 (Post-MVP): Documentation Standards and AI Validation
 
 #### 4.4.1 Improve Test Case Documentation Templates
 **Objective:** Standardize test scenario documentation.
@@ -435,7 +351,7 @@ This section outlines the implementation roadmap following this spike report. Ta
   - Detects mismatches in test steps, assertions, preconditions, and expected outcomes
   - Identifies orphaned documentation (no matching code) or undocumented tests
   - Generates detailed drift reports with specific discrepancies
-- Integrate validation into CI pipeline (e.g., presumit hook):
+- Integrate validation into CI pipeline (e.g., presubmit hook):
   - Run validation on every PR that modifies test files or documentation
   - Block merges if documentation drift exceeds threshold
   - Provide actionable feedback in PR comments
@@ -449,7 +365,71 @@ This section outlines the implementation roadmap following this spike report. Ta
 - CI job configuration for PR-based validation
 - User guide for interpreting validation results and resolving drift
 
-### 4.5 Success Criteria
+#### 4.4.3 AI-Powered Test Case Generation (Including Markdown testcase file and testing code)
+**Objective:** Accelerate test case development by using AI to automatically generate both test documentation (Markdown) and implementation code (Ginkgo + Gomega) from high-level test requirements.
+
+**AI Capabilities:**
+- **Pattern Recognition:** Analyze existing test suite to learn project-specific patterns
+- **Best Practice Application:** Automatically apply async testing patterns (`Eventually`/`Consistently`)
+- **Smart Defaults:** Infer reasonable timeouts, poll intervals, and cleanup logic
+- **Context Awareness:** Use AI-Sync-ID conventions, label patterns, and file organization from existing tests
+- **Anti-Flakiness:** Automatically include idempotent cleanup, proper error handling, and stable assertions
+
+**Deliverables:**
+- AI test generation CLI tool with multiple input modes
+- Prompt template library for common Hyperfleet test scenarios
+- Code validation pipeline ensuring generated tests meet quality standards
+- Human review guidelines and approval workflow documentation
+- User guide with examples and best practices for AI-assisted test authoring
+
+### 4.5 Phase 5 (Post-MVP): Advanced Test Observability and Debugging Platform
+
+**Objective:** Establish comprehensive test observability and debugging capabilities to accelerate root cause analysis, identify flaky tests, and reduce test failure noise across the E2E test suite.
+
+**Required Capabilities:**
+
+**1. Component-Level Failure Attribution**
+- Automatically identify which CLM component caused test failure:
+- Correlate test failures with service logs and metrics
+- Tag failures by component for targeted investigation
+
+**2. Root Cause Analysis Automation**
+- Classify failure reasons automatically:
+  - Infrastructure issues (timeout, network connectivity, resource exhaustion)
+  - Product defects (API bugs, logic errors, state machine issues)
+  - Test code issues (flaky assertions, race conditions, cleanup failures)
+  - Environmental issues (configuration drift, dependency unavailability)
+- Extract error patterns from logs and stack traces
+- Link failures to similar historical failures for faster resolution
+- Generate suggested remediation actions based on failure patterns
+
+**3. Flaky Test Identification and Management**
+- Track test pass/fail patterns across multiple runs
+- Reduce false-positive noise in CI results
+
+**4. Advanced Visualization and Dashboards**
+- Test suite health overview (pass rate, execution time trends)
+- Failure distribution by component, test type, and severity
+- Time-series analysis of test reliability over releases
+- Comparison views (current vs. previous release, PR branch vs. main)
+- Performance regression detection (test execution time trending)
+
+**5. Integration with Development Workflow**
+- Automatic GitHub issue creation for new failure patterns
+- PR comments with failure analysis and suggested fixes
+- Slack/email notifications with actionable context
+- Link test failures to relevant code changes (git blame integration)
+
+**Deliverables:**
+- Production-ready test analytics platform deployment
+- Component-level failure attribution and root cause analysis
+- Flaky test identification dashboard with auto-quarantine
+- Custom dashboards showing test health, trends, and regressions
+- Automated failure notifications with actionable context
+- Team training materials and debugging runbooks
+- Integration with GitHub for automated issue creation and PR comments
+
+### 4.6 Success Criteria
 
 The E2E testing framework is considered ready for production use when:
 
