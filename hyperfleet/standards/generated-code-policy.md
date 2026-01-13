@@ -72,7 +72,7 @@ Each repository should add appropriate patterns to `.gitignore`. Note the distin
 
 **hyperfleet-api:**
 ```gitignore
-# Generated OpenAPI code
+# Generated OpenAPI code (from oapi-codegen)
 /pkg/api/openapi/
 /data/generated/
 
@@ -188,10 +188,161 @@ if git diff --name-only | grep -E "(model_.*\.go|\.pb\.go|_gen\.go)"; then
   exit 1
 fi
 ```
+---
+
+## 7. Code generator tool
+
+We selected [oapi-codegen](https://github.com/oapi-codegen/oapi-codegen) tool as the generator for our apps.
+Here is a detailed comparison among different alternatives:
+
+### OpenAPI Code Generation Comparison
+
+  Overview
+
+  | Aspect          | main/ (OpenAPI Generator) | ogen/                                     | oapi-codegen/        |
+  |-----------------|---------------------------|-------------------------------------------|----------------------|
+  | Files Generated | 34                        | 20                                        | 2                    |
+  | Lines of Code   | ~11,274                   | ~20,261                                   | ~2,530               |
+  | Runtime Deps    | None (stdlib only)        | ogen-go/ogen, go-faster/jx, OpenTelemetry | oapi-codegen/runtime |
+
+  ---
+#### 1. main/ - OpenAPI Generator (Java-based)
+
+  Type Style:
+```
+  type Cluster struct {
+      CreatedTime time.Time `json:"created_time"`
+      Name string `json:"name" validate:"regexp=^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"`
+      Spec map[string]interface{} `json:"spec"`
+      Labels *map[string]string `json:"labels,omitempty"`  // pointer for optional
+      Id *string `json:"id,omitempty"`
+  }
+```
+
+  Strengths:
+  - ✅ No runtime dependencies - uses only stdlib (encoding/json)
+  - ✅ Null-safety pattern with NullableCluster wrapper types
+  - ✅ Constructor functions (NewCluster, NewClusterWithDefaults)
+  - ✅ Validation in UnmarshalJSON - checks required properties
+  - ✅ GetXxxOk() methods return tuple (value, bool) for presence checking
+  - ✅ HasXxx() methods for optional field presence
+  - ✅ ToMap() method for generic map conversion
+  - ✅ Mature tooling - widely used, extensive documentation
+
+  Weaknesses:
+  - ❌ Verbose - each model in separate file with many boilerplate methods
+  - ❌ Pointer-based optionals (*string) - less idiomatic for Go
+  - ❌ No built-in validation beyond required field checking
+  - ❌ Flattens allOf schemas - loses composition structure
+  - ❌ Java dependency - requires JVM to run generator
+
+  ---
+####  2. ogen/ (Go-native generator)
+
+  Type Style:
+```
+  type Cluster struct {
+      ID          OptString     `json:"id"`           // Optional type wrapper
+      Kind        string        `json:"kind"`
+      Labels      OptClusterLabels `json:"labels"`
+      Name        string        `json:"name"`
+      Spec        ClusterSpec   `json:"spec"`
+      Generation  int32         `json:"generation"`
+      Status      ClusterStatus `json:"status"`
+  }
+
+  type OptString struct {
+      Value string
+      Set   bool
+  }
+```
+
+  Strengths:
+  - ✅ Opt[T] types for optionals - explicit presence tracking, no nil pointer issues
+  - ✅ Built-in validation (oas_validators_gen.go) with structured errors
+  - ✅ OpenTelemetry integration - tracing/metrics out of the box
+  - ✅ Enum validation with MarshalText/UnmarshalText
+  - ✅ High-performance JSON using go-faster/jx (no reflection)
+  - ✅ Generated getters/setters for all fields
+  - ✅ Pure Go toolchain - no JVM needed
+  - ✅ Server + Client generation in same package
+  - ✅ Type-safe response types (GetClusterByIdRes interface)
+
+  Weaknesses:
+  - ❌ Largest output (~20k lines) - more code to maintain
+  - ❌ Heavy runtime dependencies - ogen-go/ogen, go-faster/*, OTel
+  - ❌ Learning curve - Opt[T] pattern different from idiomatic Go
+  - ❌ Less flexibility - opinionated about patterns
+  - ❌ Flattens allOf - doesn't preserve schema composition
+
+  ---
+####  3. oapi-codegen/ (Go-native generator)
+
+  Type Style:
+```
+  type Cluster struct {
+      // Preserves allOf composition!
+      ClusterBase `yaml:",inline"`
+
+      CreatedBy   openapi_types.Email `json:"created_by"`  // Typed email
+      CreatedTime time.Time           `json:"created_time"`
+      Generation  int32               `json:"generation"`
+      Status      ClusterStatus       `json:"status"`
+  }
+
+  type ClusterBase struct {
+      APIResource `yaml:",inline"`
+      Kind string `json:"kind"`
+      Name string `json:"name"`
+      Spec ClusterSpec `json:"spec"`
+  }
+```
+
+  Strengths:
+  - ✅ Most compact (~2.5k lines, 2 files) - minimal footprint
+  - ✅ Preserves allOf composition - embedded structs match schema
+  - ✅ Semantic types - openapi_types.Email instead of string
+  - ✅ Lightweight runtime - just oapi-codegen/runtime
+  - ✅ Pure Go toolchain - no JVM
+  - ✅ ClientWithResponses - parsed response bodies with type safety
+  - ✅ RequestEditorFn pattern - clean auth/middleware injection
+  - ✅ Go-idiomatic - feels like handwritten Go code
+
+  Weaknesses:
+  - ❌ No built-in validation - must add manually or use external
+  - ❌ Pointer-based optionals (*string) - though less pervasive
+  - ❌ Fewer accessor methods - direct field access preferred
+  - ❌ Less observability - no OTel integration
+  - ❌ Returns *http.Response - need ClientWithResponses for parsed bodies
+
+  ---
+  Comparison Summary
+
+  | Feature            | main/       | ogen/        | oapi-codegen/ |
+  |--------------------|-------------|--------------|---------------|
+  | Code Size          | Medium      | Large        | Small ✅      |
+  | Runtime Deps       | None ✅     | Heavy        | Light         |
+  | Optional Handling  | Pointers    | Opt[T] ✅    | Pointers      |
+  | Validation         | Basic       | Full ✅      | None          |
+  | Schema Composition | Flattened   | Flattened    | Preserved ✅  |
+  | Observability      | None        | OTel ✅      | None          |
+  | Go Idiomaticity    | Medium      | Medium       | High ✅       |
+  | Type Safety        | Good        | Excellent ✅ | Good          |
+  | Maintenance        | Java needed | Go           | Go            |
+
+  ---
+  **Recommendation**
+
+  For our use case (types + client only):
+
+  - oapi-codegen is the best fit if you want minimal, Go-idiomatic code that preserves your schema composition (allOf inheritance). The embedded struct pattern (ClusterBase → Cluster) is clean and matches your OpenAPI design.
+  - ogen is better if you need built-in validation, observability (OTel), or are building a complete server+client solution. The Opt[T] pattern is cleaner than nil pointers.
+  - OpenAPI Generator (main/) is worth keeping if you need maximum compatibility or zero runtime dependencies, though the Java requirement and verbose output are downsides.
+
 
 ---
 
-## 7. References
+## 8. References
 
 - [Makefile Conventions](makefile-conventions.md)
 - [HYPERFLEET-303](https://issues.redhat.com/browse/HYPERFLEET-303)
