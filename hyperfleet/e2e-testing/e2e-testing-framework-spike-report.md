@@ -389,7 +389,7 @@ This section outlines the implementation roadmap following this spike report. Ta
 **Required Capabilities:**
 
 **1. Component-Level Failure Attribution**
-- Automatically identify which CLM component caused test failure:
+- Automatically identify which CLM component caused test failure
 - Correlate test failures with service logs and metrics
 - Tag failures by component for targeted investigation
 
@@ -428,6 +428,16 @@ This section outlines the implementation roadmap following this spike report. Ta
 - Automated failure notifications with actionable context
 - Team training materials and debugging runbooks
 - Integration with GitHub for automated issue creation and PR comments
+
+**Insights from OCP:**
+
+The OCP team is currently migrating from ReportPortal to Sippy for their test observability and analytics platform.
+
+Sippy does not support the same type of dashboard as ReportPortal, where you can view test results for each job and each component in a single dashboard. However, Sippy provides:
+
+1. **Component Readiness**: Gives a quick overview of whether each component passes or fails under different scenarios (configurations) based on recent runs
+2. **Test-case-level and job-level views**: Allows you to see both aggregated and detailed test results
+3. **Failure Alerts**: For failed jobs/testcases, Sippy has alerts to notify the team via Slack messages
 
 ### 4.6 Success Criteria
 
