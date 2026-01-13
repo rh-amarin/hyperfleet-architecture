@@ -171,6 +171,30 @@ This solution requires a method to run tasks in the Management Clusters, e.g. us
 
 This removes the need to deal with customer resources access from CLM components.
 
+## Alternative 3: Simplest WIF solution for MVP, customer allows all workloads on Hyperfleet GCP project
+
+For our MVP phase, the simplest solution that works is for the customer to allow "All identities in a workload identity pool" ([google docs](https://docs.cloud.google.com/iam/docs/principal-identifiers#allow)). This means, all the adapter tasks that run in any cluster in the `hcm-hyperfleet` GCP project will be authorized.
+
+In order to do this, customer project must allow permissions to:
+```
+principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL_ID/*
+
+#for hcm-hyperfleet
+principalSet://iam.googleapis.com/projects/275239757837/locations/global/workloadIdentityPools/hcm-hyperfleet.svc.id.goog/*
+```
+As an example, for a customer project named `simulated-customer-project-1` ([link to console](https://console.cloud.google.com/iam-admin/iam?cloudshell=true&project=simulated-customer-project-1)
+It contains a topic named `sample-topic`
+
+Assign "pubsub viewer permissions" to the principalSet
+The following command will run a k8s job that list the topics in the project. It should succeed in every cluster and any namespace in the `hcm-hyperfleet` project
+
+```
+kubectl create job list-pubsub-topics \
+  --image=google/cloud-sdk:latest \
+  -- \
+  gcloud pubsub topics list --project simulated-customer-project-1
+```
+
 
 
 ## Exploring Workload Identity Federation
