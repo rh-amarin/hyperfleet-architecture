@@ -50,12 +50,13 @@ Follow the official documentation: https://docs.ci.openshift.org/docs/how-tos/ad
    **Required secretsync Fields:**
 
    - **secretsync/target-namespace**: The namespace of your secret in the build clusters
-     - Common values: `"ci"` or `"test-credentials"`
+     - Option values: `"ci"` or `"test-credentials"`
      - Multiple namespaces can be targeted using a comma-separated list
      - **Note**: If you are adding secrets for multi-stage test, it should be `"test-credentials"` ns. Only if you were adding a [cluster profile](https://docs.ci.openshift.org/docs/how-tos/adding-a-cluster-profile/#providing-credentials) secret it would be `"ci"`.
 
    - **secretsync/target-name**: The name of your secret in the build clusters
-     - Example: `"cluster-secrets-hyperfleet-e2e"`
+     - Inject the secret with mount example : `"hyperfleet-e2e"`, you can replace the value with yours.
+     - Cluster profile example: `"cluster-secrets-hyperfleet-e2e"`, you can replace **hyperfleet-e2e** with yours.
 
    **Your Secret Data:**
    ```
@@ -71,8 +72,8 @@ Follow the official documentation: https://docs.ci.openshift.org/docs/how-tos/ad
 Path: selfservice/hyperfleet/hyperfleet-e2e
 
 Key-Value Pairs:
-  secretsync/target-namespace: "ci"
-  secretsync/target-name: "cluster-secrets-hyperfleet-e2e"
+  secretsync/target-namespace: "test-credentials"
+  secretsync/target-name: "hyperfleet-e2e"
   "db_password": "your-password-value-here"
 ```
 
@@ -80,21 +81,25 @@ Key-Value Pairs:
 
 Update the release repository configuration to include your new secret configuration.
 
-1. Add the new alias in the ci-tools repo. Example [PR](https://github.com/openshift/ci-tools/pull/4822)
-2. Add the above slice for new team secret.The new added cluster profile will be used for the test jobs on PROW. Example [PR](https://github.com/openshift/release/pull/71341)
-3. After the two PRs are merged,you can use the new cluster profile alias in test job
+1. Add the new alias in the ci-tools repo. Example [PR](https://github.com/openshift/ci-tools/pull/4880)
+2. Add the above slice for new team secret.The new added slice will be used for the test jobs on PROW. Example [PR](https://github.com/openshift/release/pull/73121)
+3. After the two PRs are merged,you can use the new slice in test job. Example [PR](https://github.com/openshift/release/pull/73259)
 ```yaml
-- as: hyperfleet-e2e-critical-high-job
-  steps:
-    cluster_profile: hyperfleet-e2e
-    env:
-      cluster_name_prefix: hyperfleet-e2e-tests
-      ...
-    test:
-    - ref: hyperfleet-e2e-tests
-    workflow: hyperfleet-gcp-hcp
+  env:
+  - name: HYPERFLEET_E2E_PATH
+    default: /var/run/hyperfleet-e2e/
+  credentials:
+  - collection: ""
+    namespace: test-credentials 
+    name: hyperfleet-e2e 
+    mount_path: /var/run/hyperfleet-e2e
+```
+Get the secret in test script
+```bash
+DB_PD=$(cat "${HYPERFLEET_E2E_PATH}/db_password")
 ```
 
+Cluster profile usage can refer to the [doc](https://docs.ci.openshift.org/docs/how-tos/adding-a-cluster-profile/) 
 
 ## How to Manage Secrets
 
