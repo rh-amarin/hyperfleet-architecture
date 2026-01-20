@@ -4,20 +4,21 @@ This document proposes changes to the current system design for how API and adap
 
 ## TL;DR; Proposal
 
-Goal: Disambiguate the meaning of the `status.phase=Ready/NotReady`, that conveys:
+**Goal**: Disambiguate the meaning of the `status.phase=Ready/NotReady`, today it conveys:
 
-- **“new desired generation not reconciled”**
-- **“system broken”**
+- new desired generation not reconciled
+- system broken
 
-Proposal:
+**Proposal**:
 
 - Introduce root level conditions on API resources (clusters, nodepools)
   - `Available`: System is running
-    - It also contains an `observed_generation` property
-    - All adapters report `Available==True` at `observed_generation`
-  - `Ready`: System is running at the latest spec generation
+    - Contains an additional `observed_generation` property
+    - All adapters reported `Available==True` at `observed_generation`
+    - Kind of a "last known good configuration"
+  - `Ready`: System is running AND at the latest spec generation
 
-- For MVP
+- Simplifications **for the MVP**
   - Since we don't have k8s lifecycle management in the adapter framework
   - For the adapter task jobs
     - They will retry until successful completion
