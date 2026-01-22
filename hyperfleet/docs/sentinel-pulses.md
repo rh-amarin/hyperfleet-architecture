@@ -34,7 +34,7 @@ Sentinel will publish messages whenever:
   - For `Ready==False` clusters/nodepools, TTL=10sec
   - For `Ready==True` clusters/nodepools, TTL=30min
 
-The adapters performs some actions in their "resources" phase in order to query the state of the resource and then reports to the HyperFleet API with at least 3 mandatory conditions:
+Adapters performs some actions in their "resources" phase in order to query the state of the resource and then reports to the HyperFleet API with at least 3 mandatory conditions:
 
 - Applied: the work to be done has been started
 - Available: The status of the resource for that adapter is successful/failed
@@ -42,7 +42,7 @@ The adapters performs some actions in their "resources" phase in order to query 
 
 The actions performed in the "resources" phase make calls to an API:
 
-- k8s to create k8s objects like CRDs or Job
+- k8s to create k8s objects like CRs or Job
 - Maestro API (gRPC)
 - Other APIs
 
