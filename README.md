@@ -274,7 +274,7 @@ All HyperFleet team developers have approve and merge access. **Goal**: Move fas
 → See `hyperfleet/docs/glossary.md`
 
 **Find or record an architecture decision**
-→ See `hyperfleet/adr/` — follow the template in `hyperfleet/adr/README.md`
+→ See `hyperfleet/adrs/` — follow the template in `hyperfleet/adrs/README.md`
 
 ---
 
