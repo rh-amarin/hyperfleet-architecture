@@ -117,7 +117,7 @@ resources:
       delete:
         propagationPolicy: Background
         when:
-          expression: "deleted_time != null"
+          expression: "is_deleting"
 
   - name: clusterConfigMap
     manifest: ...
@@ -125,7 +125,7 @@ resources:
       delete:
         propagationPolicy: Background
         when:
-          expression: "deleted_time != null && !resources.?clusterJob.hasValue()"
+          expression: "is_deleting && !resources.?clusterJob.hasValue()"
 
   - name: clusterNamespace
     manifest: ...
@@ -133,7 +133,7 @@ resources:
       delete:
         propagationPolicy: Background
         when:
-          expression: "deleted_time != null && !resources.?clusterConfigMap.hasValue() && !resources.?clusterJob.hasValue()"
+          expression: "is_deleting && !resources.?clusterConfigMap.hasValue() && !resources.?clusterJob.hasValue()"
 ```
 
 **Fields:**
@@ -141,20 +141,22 @@ resources:
 | Field | Required | Type | Default | Description |
 |-------|----------|------|---------|-------------|
 | `lifecycle.delete.propagationPolicy` | NO | string | `Background` | Kubernetes propagation policy: `Background`, `Foreground`, or `Orphan` |
-| `lifecycle.delete.when.expression` | NO | string (CEL) | `false` | CEL expression evaluated each reconciliation loop. Resource is deleted only when expression evaluates to `true`. |
+| `lifecycle.delete.when.expression` | **YES** | string (CEL) | — | CEL expression evaluated each reconciliation loop. Resource is deleted only when expression evaluates to `true`. Required when `lifecycle.delete` is configured — the adapter validator rejects configs where it is absent. |
 
 - Evaluated after parameter extraction and preconditions (needs captured variables)
 - When `lifecycle.delete.when.expression` is `true`: executor discovers and deletes the resource
 - When `lifecycle.delete.when.expression` is `false`: executor runs normal apply flow (resource is not being deleted yet)
 - If `lifecycle` is not specified on a resource: normal apply flow (backward compatible)
 
-**Important**: `lifecycle.delete.when.expression` should be driven by `deleted_time`, not derived status fields. `deleted_time` is the canonical deletion trigger. Ordering conditions (e.g., `!resources.?clusterJob.hasValue()`) are combined with the deletion trigger in a single expression.
+**Important**: `lifecycle.delete.when.expression` should be driven by the `is_deleting` named capture variable, not derived status fields. `is_deleting` is set in preconditions via `has(preconditionName.deleted_time)` and is the canonical deletion trigger. Ordering conditions (e.g., `!resources.?clusterJob.hasValue()`) are combined with `is_deleting` in a single expression.
 
 ```yaml
-# Precondition captures deletion timestamp for lifecycle expressions
+# Capture is_deleting using the named-map-variable approach — no separate deleted_time capture needed.
+# has(preconditionName.deleted_time) returns false cleanly when the field is absent (non-deleting case)
+# without logging a WARN on every reconciliation.
 capture:
-  - name: deleted_time
-    field: deleted_time
+  - name: is_deleting
+    expression: "has(checkClusterState.deleted_time)"
 ```
 
 **Evaluation order in the executor:**
@@ -197,7 +199,7 @@ flowchart TD
 
 #### Deletion Ordering
 
-Deletion ordering is controlled by the `when.expression` CEL expression in `lifecycle.delete`. The expression combines the deletion trigger (`deleted_time != null`) with ordering conditions (e.g., `!resources.?clusterJob.hasValue()`). Resources are deleted only when their full expression evaluates to `true`.
+Deletion ordering is controlled by the `when.expression` CEL expression in `lifecycle.delete`. The expression combines the deletion trigger (`is_deleting`) with ordering conditions (e.g., `!resources.?clusterJob.hasValue()`). Resources are deleted only when their full expression evaluates to `true`.
 
 Example ordering for a typical adapter:
 
@@ -209,17 +211,17 @@ resources:
     lifecycle:
       delete:
         when:
-          expression: "deleted_time != null"                                   # deleted first
+          expression: "is_deleting"                                   # deleted first
   - name: clusterConfigMap
     lifecycle:
       delete:
         when:
-          expression: "deleted_time != null && !resources.?clusterJob.hasValue()"    # wait for Job to be gone
+          expression: "is_deleting && !resources.?clusterJob.hasValue()"    # wait for Job to be gone
   - name: clusterNamespace
     lifecycle:
       delete:
         when:
-          expression: "deleted_time != null && !resources.?clusterConfigMap.hasValue() && !resources.?clusterJob.hasValue()"  # wait for all to be gone
+          expression: "is_deleting && !resources.?clusterConfigMap.hasValue() && !resources.?clusterJob.hasValue()"  # wait for all to be gone
 ```
 
 The `when.expression` is evaluated each reconciliation loop. Once a resource is deleted and discovery stores a nil value for it, `!resources.?clusterJob.hasValue()` evaluates to `true`, unblocking dependent resources on the next loop iteration. Use `!resources.?X.hasValue()` rather than `has()` or direct access — see the CEL note in the example task config for details.
@@ -293,7 +295,7 @@ The generation increment triggers Sentinel (`observed_generation < generation` �
 
 ### Status Reporting During Deletion
 
-The existing status contract is unchanged — `Applied`, `Available`, and `Health` reflect the real state of managed resources as observed by the adapter, regardless of whether `deleted_time` is set. They are not deletion-aware and do not use deletion-specific reasons. Only `Finalized` is deletion-specific. The adapter always reports `observed_generation` equal to the current API `generation` (see [Generation Behavior During Deletion](#generation-behavior-during-deletion)). The `is_deleting` variable used in post-processing is captured from `deleted_time != null` during preconditions.
+The existing status contract is unchanged — `Applied`, `Available`, and `Health` reflect the real state of managed resources as observed by the adapter, regardless of whether `deleted_time` is set. They are not deletion-aware and do not use deletion-specific reasons. Only `Finalized` is deletion-specific. The adapter always reports `observed_generation` equal to the current API `generation` (see [Generation Behavior During Deletion](#generation-behavior-during-deletion)). The `is_deleting` variable used in post-processing is a named capture set in preconditions via `has(preconditionName.deleted_time)`.
 
 #### Pattern: Deletion In Progress
 
@@ -457,10 +459,8 @@ preconditions:
       url: /clusters/{{ .clusterId }}
       timeout: 10s
     capture:
-      - name: deleted_time
-        field: deleted_time
       - name: is_deleting
-        expression: "deleted_time != null"
+        expression: "has(clusterStatus.deleted_time)"
       - name: clusterName
         field: name
       - name: generation
@@ -482,7 +482,7 @@ resources:
       delete:
         propagationPolicy: Background
         when:
-          expression: "deleted_time != null && !resources.?clusterConfigMap.hasValue() && !resources.?clusterJob.hasValue()"
+          expression: "is_deleting && !resources.?clusterConfigMap.hasValue() && !resources.?clusterJob.hasValue()"
 
   - name: clusterConfigMap
     manifest:
@@ -498,7 +498,7 @@ resources:
       delete:
         propagationPolicy: Background
         when:
-          expression: "deleted_time != null && !resources.?clusterJob.hasValue()"
+          expression: "is_deleting && !resources.?clusterJob.hasValue()"
 
   - name: clusterJob
     manifest:
@@ -514,7 +514,7 @@ resources:
       delete:
         propagationPolicy: Background
         when:
-          expression: "deleted_time != null"
+          expression: "is_deleting"
 
 post:
   payloads:
@@ -590,7 +590,7 @@ post:
         body: '{{ .clusterStatusPayload }}'
 ```
 
-**Note on CEL complexity**: The `is_deleting` ternary branching adds complexity to post-processing expressions. The `is_deleting` variable is captured in preconditions from `deleted_time != null`. Mitigate with descriptive `reason` values and testing both creation/deletion paths.
+**Note on CEL complexity**: The `is_deleting` ternary branching adds complexity to post-processing expressions. The `is_deleting` variable is a named capture set in preconditions via `has(preconditionName.deleted_time)`. Mitigate with descriptive `reason` values and testing both creation/deletion paths.
 
 **CEL resource presence pattern — use `!resources.?X.hasValue()`, not `has()`**: When checking whether a managed resource has been deleted, always use `!resources.?resourceName.hasValue()`, not `has(resources.resourceName)` or `resources.resourceName == null`.
 
@@ -725,14 +725,14 @@ Deletion operations are idempotent. Multiple delete calls for the same K8s resou
 
 Same pattern as resource deletion. The API marks just the subresource for deletion (sets `deleted_time`), subresource-level adapters handle cleanup.
 
-**Trigger contract**: Subresource deletion must be keyed off `deleted_time` (the canonical delete intent) in each resource's `lifecycle.delete.when.expression`:
+**Trigger contract**: Subresource deletion must be keyed off the `is_deleting` named capture variable (set via `has(preconditionName.deleted_time)`) in each resource's `lifecycle.delete.when.expression`:
 
 ```yaml
 # Canonical delete signal per resource
 lifecycle:
   delete:
     when:
-      expression: "deleted_time != null"
+      expression: "is_deleting"
 ```
 
 #### Customer-Visible Deletion State
@@ -790,7 +790,7 @@ Not required. Each adapter only cleans up its own resources. Unlike creation (wh
 - Resources phase executor becomes more complex (per-resource lifecycle evaluation)
 - Post-processing CEL expressions become more complex (must handle both creation and deletion states via `is_deleting`)
 - `lifecycle.delete.when` expressions are evaluated each reconciliation loop to determine deletion readiness
-- Each resource's `lifecycle.delete.when` must include the deletion trigger (`deleted_time != null`), leading to some repetition across resources
+- Each resource's `lifecycle.delete.when` must include the `is_deleting` capture variable, leading to some repetition across resources
 - Adapter config authors must think about deletion when designing adapters
 
 ---
@@ -851,7 +851,7 @@ The following field must be added to the adapter framework's `AdapterTaskConfig`
 
 The field is optional with backward-compatible defaults:
 - `lifecycle` not set → apply-only behavior (existing adapters unchanged)
-- `lifecycle.delete.when` not set → defaults to `false`
+- `lifecycle.delete.when.expression` → **required** when `lifecycle.delete` is configured; the adapter validator rejects configs where it is absent
 - `lifecycle.delete.propagationPolicy` not set → defaults to `Background`
 
 ### Status Contract Change
