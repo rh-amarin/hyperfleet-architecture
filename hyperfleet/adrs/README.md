@@ -76,4 +76,15 @@ What did we decide? State it plainly.
 
 | ADR | Title | Status | Date |
 |-----|-------|--------|------|
-| — | *(no ADRs yet)* | — | — |
+| [0001](0001-cloudevents-as-event-format.md) | CloudEvents as the Inter-Component Event Format | Active | 2026-04-15 |
+| [0002](0002-pluggable-message-broker-library.md) | Pluggable Message Broker via hyperfleet-broker Library | Active | 2026-04-15 |
+| [0003](0003-openapi-first-contract.md) | OpenAPI 3.0 as the System Contract (API-First Development) | Active | 2026-04-15 |
+| [0004](0004-sentinel-stateless-polling-architecture.md) | Sentinel as a Stateless Polling Reconciliation Loop | Active | 2026-04-15 |
+| [0005](0005-config-driven-adapter-framework.md) | Config-Driven Adapter Framework (Single Binary, Multiple Deployments) | Active | 2026-04-15 |
+| [0006](0006-cel-expression-engine.md) | CEL as the Shared Expression Evaluation Engine | Active | 2026-04-15 |
+| [0007](0007-conditions-based-status-model.md) | Kubernetes-Style Conditions-Based Status Model | Active | 2026-04-15 |
+| [0008](0008-dynamic-status-aggregation.md) | Dynamic Status Aggregation (Compute on Write) | Active | 2026-04-16 |
+| [0009](0009-uuid-v7-resource-identifiers.md) | UUID v7 for Cluster and NodePool Identifiers | Active | 2026-04-15 |
+| [0010](0010-jsonb-provider-agnostic-spec.md) | JSONB for Provider-Agnostic Cluster and NodePool Spec Storage | Active | 2026-04-15 |
+| [0011](0011-two-phase-deletion-flow.md) | Two-Phase Deletion (Soft-Delete + Adapter Cleanup + Hard-Delete) | Active | 2026-04-15 |
+| [0012](0012-testcontainers-for-integration-tests.md) | Testcontainers for Integration Tests | Active | 2026-04-16 |
