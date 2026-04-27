@@ -48,7 +48,6 @@ This document contains the proposal for the Generic Resource Registry and altern
 11. [Risks](#11-risks)
 
 - [Appendix A. Current State](#appendix-a-current-state)
-- [Appendix B. Authorization Design](#appendix-b-authorization-design)
 
 ---
 
@@ -56,7 +55,7 @@ This document contains the proposal for the Generic Resource Registry and altern
 
 HyperFleet API currently has two managed entity types — Cluster and NodePool — and more are expected. Adding each new entity type requires changing the code, which is mostly duplicated code and releasing a new version.
 
-This is not desirable since slows down HyperFleet customers willing to add new functionality and having to wait until these changes are coordinated and deployed
+This is not desirable since it slows down HyperFleet customers willing to add new functionality and having to wait until these changes are coordinated and deployed
 
 **Goals:**
 
@@ -74,7 +73,7 @@ The design rests on three ideas:
 1. **Generic OpenAPI contract**: the API exposes a single `Resource` response type.
     - The `spec` field is an untyped JSON object at the API layer;
     - Entity-specific spec shapes are validated by a separate schema contract file.
-2. **Single Go type**: all entities share one GORM struct (`Resource`) with a `type` discriminator.
+2. **Single Go type**: all entities share one GORM struct (`Resource`) with a `kind` discriminator.
     - One `resources` table.
 3. **Entity registry**: each entity type is described by an `EntityDescriptor` registered at startup.
     - The registry drives route generation, spec validation, status aggregation, and delete behavior.
@@ -97,11 +96,10 @@ In the future the hyperfleet-api may add more endpoints that are not managed Ent
 
 ```yaml
 Resource:
-  required: [id, type, name, spec, status, generation, created_time, updated_time, created_by, updated_by]
+  required: [id, kind, name, spec, status, generation, created_time, updated_time, created_by, updated_by]
   properties:
     id:               { type: string }
-    type:             { type: string }   # "Cluster", "NodePool", etc.
-    kind:             { type: string }   # display name, usually same as type
+    kind:             { type: string }   # "Cluster", "NodePool", etc.
     name:             { type: string }
     href:             { type: string }
     spec:             { type: object, additionalProperties: true }
@@ -115,9 +113,9 @@ Resource:
     updated_by:       { type: string, format: email }
 
 ResourceCreateRequest:
-  required: [type, name, spec]
+  required: [kind, name, spec]
   properties:
-    type:   { type: string }
+    kind:   { type: string }
     name:   { type: string }
     spec:   { type: object, additionalProperties: true }
     labels: { type: object, additionalProperties: { type: string } }
@@ -202,11 +200,10 @@ GET POST         /api/hyperfleet/v1/clusters/{parent_id}/node-pools/{id}/statuse
 
 ```go
 // Resource is the single Go type for all HyperFleet managed entities.
-// Entity types are differentiated by the Type field (e.g., "Cluster", "NodePool").
+// Entity kinds are differentiated by the Kind field (e.g., "Cluster", "NodePool").
 type Resource struct {
     Meta                                // ID, CreatedTime, UpdatedTime, DeletedAt
 
-    Type       string         `gorm:"column:type;size:100;not null"`
     Kind       string         `gorm:"column:kind;size:100;not null"`
     Name       string         `gorm:"column:name;size:100;not null"`
     Href       string         `gorm:"column:href;size:500"`
@@ -271,8 +268,7 @@ GORM lifecycle hooks (`BeforeCreate`, `BeforeUpdate`) on `Resource` handle ID ge
 | Column | Type | Notes |
 |---|---|---|
 | `id` | `VARCHAR(255)` PK | RFC 4122 UUID v7 |
-| `type` | `VARCHAR(100)` NOT NULL | Discriminator |
-| `kind` | `VARCHAR(100)` NOT NULL | Display name |
+| `kind` | `VARCHAR(100)` NOT NULL | Discriminator — e.g., "Cluster", "NodePool" |
 | `name` | `VARCHAR(100)` NOT NULL | |
 | `href` | `VARCHAR(500)` | Computed |
 | `created_by` / `updated_by` | `VARCHAR(255)` | |
@@ -325,21 +321,21 @@ Primary key: `(resource_id, type)` — enforces one condition per type per resou
 <summary>Database indexes</summary>
 
 ```sql
--- resources: name uniqueness per type for top-level entities
-CREATE UNIQUE INDEX idx_resources_type_name
-    ON resources (type, name)
+-- resources: name uniqueness per kind for top-level entities
+CREATE UNIQUE INDEX idx_resources_kind_name
+    ON resources (kind, name)
     WHERE owner_id = '' AND deleted_at IS NULL;
 
--- resources: name uniqueness per type + owner for child entities
-CREATE UNIQUE INDEX idx_resources_type_owner_name
-    ON resources (type, owner_id, name)
+-- resources: name uniqueness per kind + owner for child entities
+CREATE UNIQUE INDEX idx_resources_kind_owner_name
+    ON resources (kind, owner_id, name)
     WHERE owner_id != '' AND deleted_at IS NULL;
 
 -- resources: child lookups
 CREATE INDEX idx_resources_owner_id ON resources (owner_id) WHERE owner_id != '';
 
--- resources: type filter (drives all list queries)
-CREATE INDEX idx_resources_type ON resources (type);
+-- resources: kind filter (drives all list queries)
+CREATE INDEX idx_resources_kind ON resources (kind);
 
 -- resources: soft delete
 CREATE INDEX idx_resources_deleted_at ON resources (deleted_at);
@@ -354,11 +350,11 @@ CREATE INDEX idx_resources_deleted_at ON resources (deleted_at);
 
 </details>
 
-Name uniqueness is scoped **per entity type**: a Cluster named `"prod"` and a NodePool named `"prod"` can coexist. Two Clusters named `"prod"` cannot.
+Name uniqueness is scoped **per entity kind**: a Cluster named `"prod"` and a NodePool named `"prod"` can coexist. Two Clusters named `"prod"` cannot.
 
 ### 4.3 `ResourceDao` (`pkg/dao/resource.go`)
 
-Single DAO interface replacing `ClusterDao` and `NodePoolDao`. All queries include `type = ?` as a scope condition. `Get` and `GetByOwner` always preload `Labels` and `Conditions`. List operations preload them via `GenericService`'s `Preload` chain.
+Single DAO interface replacing `ClusterDao` and `NodePoolDao`. All queries include `kind = ?` as a scope condition. `Get` and `GetByOwner` always preload `Labels` and `Conditions`. List operations preload them via `GenericService`'s `Preload` chain.
 
 <details>
 <summary>ResourceDao interface</summary>
@@ -432,7 +428,7 @@ const (
 // Registering a descriptor auto-generates all routes, spec validation,
 // status aggregation, and delete behavior for that entity type.
 type EntityDescriptor struct {
-    // Type is the discriminator stored in Resource.Type.
+    // Type is the discriminator value stored in Resource.Kind.
     // Must be unique across all registered descriptors. e.g., "Cluster", "NodePool".
     Type string
 
@@ -469,12 +465,6 @@ type EntityDescriptor struct {
     // Empty string = no spec validation (accept any JSON object).
     // e.g., "ClusterSpec", "NodePoolSpec".
     SpecSchemaName string
-
-    // Authz defines per-operation authorization configuration.
-    // nil = no authorization checks (current default for all entities).
-    // OperationPermissions is expressible in the config file (plain string map).
-    // ResourceCheck is Go-only (it is a function); entities requiring it must be registered via Register().
-    Authz *EntityAuthzConfig
 }
 ```
 
@@ -498,7 +488,7 @@ func LoadFromConfig(cfg config.ApplicationConfig)
 func Validate()
 ```
 
-Descriptors are loaded from the application config file. The `Validate()` call in `Env.Initialize()` catches missing parent registrations or invalid/duplicated entries immediately at startup. Entities requiring custom `Authz` hooks can still be registered via `Register()` in Go code alongside config-loaded descriptors.
+Descriptors are loaded from the application config file. The `Validate()` call in `Env.Initialize()` catches missing parent registrations or invalid/duplicated entries immediately at startup.
 
 ### 5.3 Entity configuration examples
 
@@ -524,17 +514,9 @@ entities:
     specSchemaName: NodePoolSpec
     requiredAdapters: [provisioner, lifecycle]
     searchDisallowedFields: [spec]
-    authz:
-      operationPermissions:
-        GET: hyperfleet.node-pools.view
-        POST: hyperfleet.node-pools.create
-        PATCH: hyperfleet.node-pools.update
-        DELETE: hyperfleet.node-pools.delete
 ```
 
 That is all per-entity configuration required. No DAO, no service, no handler, no presenter, no Go code.
-
-`authz.operationPermissions` is a plain string map and is fully expressible in config. `ResourceCheck` (per-resource ownership or tenant isolation logic) is a Go function and requires registering the descriptor via `Register()` — it cannot be declared in YAML.
 
 ### 5.4 Href generation
 
@@ -576,7 +558,7 @@ POST /api/hyperfleet/v1/resources                          ✗ (for child entity
 
 ## 6. Spec Field Validation
 
-HyperFleet accepts JSON as the `spec` property of a `Resource`. To provider greater guarantees about the data being stored, a validation process is performed on the `spec` contents using a provider-specific OpenAPI schema with the full detail of the entities schemas.
+HyperFleet accepts JSON as the `spec` property of a `Resource`. To provide greater guarantees about the data being stored, a validation process is performed on the `spec` contents using a provider-specific OpenAPI schema with the full detail of the entities schemas.
 
 ### 6.1 Current implementation
 
@@ -588,11 +570,17 @@ The current implementation hardcodes the entity type → schema name mapping (`"
 
 A separate YAML file (configured via `server.openapi_schema_path`) contains provider-specific spec schemas for entities. This is the OpenAPI exposed to final customers, provided by the ROSA/GCP teams.
 
-The `SpecSchemaName` field on `EntityDescriptor` replaces the hardcoded mapping allowing to specify the schema name in the provided OpenAPI schema
+The `SpecSchemaName` field on `EntityDescriptor` replaces the hardcoded mapping, allowing the schema name to be specified per entity kind in the config.
 
-When registering the mappings, the validation function will validate that schemas for entities are present in the provided OpenAPI contract.
+**Startup validation:** During `registry.Validate()`, the system loads the OpenAPI document at `server.openapi_schema_path` and checks every registered descriptor:
 
-When a request is made (POST/PATCH) containing an `spec`, the mapping is used to extract the schema for validating the payload.
+1. The `SpecSchemaName` must resolve to an existing schema component. If missing, the server panics with: `entity "Cluster": specSchemaName "ClusterSpec" not found in OpenAPI spec at <path>`.
+2. If the resolved schema defines `minLength`/`maxLength` on the `name` property, these are cross-checked against the descriptor's `NameMinLen`/`NameMaxLen`. A mismatch produces a startup warning.
+3. If `SpecSchemaName` is empty (no spec validation for this entity), the check is skipped.
+
+A CI integration test should load the production config and the provider's OpenAPI spec, run `LoadFromConfig()` + `Validate()`, and fail the build on any mismatch — catching drift before deployment.
+
+**Request-time validation:** When a request is made (POST/PATCH) containing a `spec`, the middleware uses the entity registry to look up the `SpecSchemaName` for the entity kind and validates the payload against that schema.
 
 No changes to the middleware or validator are required, only how to extract the name of the schema to use from the entity registry.
 
@@ -610,7 +598,7 @@ Replaces all per-entity `ConvertCluster`, `PresentCluster`, `ConvertNodePool`, `
 ```go
 func ConvertResource(
     req *openapi.ResourceCreateRequest,
-    entityType, ownerID, ownerType, ownerHref, createdBy string,
+    entityKind, ownerID, ownerType, ownerHref, createdBy string,
 ) *api.Resource {
     specJSON, _ := json.Marshal(req.Spec)
 
@@ -621,8 +609,7 @@ func ConvertResource(
     }
 
     return &api.Resource{
-        Type:      entityType,
-        Kind:      entityType,
+        Kind:      entityKind,
         Name:      req.Name,
         Spec:      specJSON,
         Labels:    labels,
@@ -646,7 +633,7 @@ func PresentResource(r *api.Resource) openapi.Resource {
 
     // Conditions are typed structs from the resource_conditions table — no JSON unmarshal needed.
     result := openapi.Resource{
-        Id: r.ID, Type: r.Type, Kind: r.Kind, Name: r.Name, Href: r.Href,
+        Id: r.ID, Kind: r.Kind, Name: r.Name, Href: r.Href,
         Spec: spec, Labels: labels, Generation: r.Generation,
         CreatedTime: r.CreatedTime, UpdatedTime: r.UpdatedTime,
         CreatedBy: openapi_types.Email(r.CreatedBy),
@@ -706,8 +693,6 @@ func (h *ResourceHandler) GetByOwner(w http.ResponseWriter, r *http.Request) {
 
     handleGet(w, r, &handlerConfig{
         Action: func() (interface{}, *errors.ServiceError) {
-            if err := h.checkOperationAuthz(r, http.MethodGet); err != nil { return nil, err }
-
             // Verify parent exists
             _, err := h.service.Get(r.Context(), h.descriptor.ParentType, parentID)
             if err != nil { return nil, err }
@@ -715,7 +700,6 @@ func (h *ResourceHandler) GetByOwner(w http.ResponseWriter, r *http.Request) {
             resource, err := h.service.GetByOwner(r.Context(), h.descriptor.Type, id, parentID)
             if err != nil { return nil, err }
 
-            if err := h.checkResourceAuthz(r, resource); err != nil { return nil, err }
             return presenters.PresentResource(resource), nil
         },
     })
@@ -734,10 +718,9 @@ func (h *ResourceHandler) Delete(w http.ResponseWriter, r *http.Request) {
     id := mux.Vars(r)["id"]
     handleDelete(w, r, &handlerConfig{
         Action: func() (interface{}, *errors.ServiceError) {
-            if err := h.checkOperationAuthz(r, http.MethodDelete); err != nil { return nil, err }
             return nil, h.service.Delete(r.Context(), h.descriptor.Type, id)
         },
-    }, http.StatusNoContent)
+    }, http.StatusAccepted)
 }
 ```
 
@@ -776,11 +759,9 @@ func RegisterEntityRoutes(
     resourceService services.ResourceService,
     adapterStatusService services.AdapterStatusService,
     genericService services.GenericService,
-    authMiddleware auth.JWTMiddleware,
-    authzMiddleware auth.AuthorizationMiddleware,
 ) {
     for _, descriptor := range registry.All() {
-        h := NewResourceHandler(descriptor, resourceService, genericService, authzMiddleware)
+        h := NewResourceHandler(descriptor, resourceService, genericService)
         sh := NewResourceStatusHandler(descriptor, resourceService, adapterStatusService)
 
         base := "/" + descriptor.Plural
@@ -837,7 +818,7 @@ Different child types of the same parent can have different policies. For exampl
 There is no caller-supplied query parameter. The API surface is simply:
 
 ```
-DELETE /clusters/{id} → 204 No Content  (NodePools cascade)
+DELETE /clusters/{id} → 202 Accepted  (NodePools cascade)
                       → 409 Conflict    (if a restrict-policy child exists)
 ```
 
@@ -900,7 +881,7 @@ The database is initialized from scratch. There is no existing data to migrate a
 
 The `clusters` and `node_pools` tables are not dropped — the database is initialized from scratch with no pre-existing tables.
 
-The `adapter_statuses` table is unchanged. Its `resource_type` column already stores the entity type string (`"Cluster"`, `"NodePool"`) and needs no migration.
+The `adapter_statuses` table is unchanged. Its `resource_type` column already stores the entity kind string (`"Cluster"`, `"NodePool"`) and needs no migration.
 
 ---
 
@@ -929,7 +910,8 @@ Store `labels JSONB` and `status_conditions JSONB` on the `resources` row.
 
 **Chosen:** Descriptor-driven `OnParentDelete` policy on the child entity. See §8 for the implementation.
 
-**Alternative A — Restrict only**
+<details>
+<summary><strong>Alternative A — Restrict only</strong></summary>
 
 A parent cannot be deleted while it has active children. `409 Conflict` always; no cascade option.
 
@@ -937,7 +919,10 @@ A parent cannot be deleted while it has active children. `409 Conflict` always; 
 - Pro : Simplest service implementation — no cascade path
 - Con : UX friction for deep hierarchies; caller must delete children bottom-up in multiple round trips
 
-**Alternative B — Cascade always**
+</details>
+
+<details>
+<summary><strong>Alternative B — Cascade always</strong></summary>
 
 Deleting a parent immediately soft-deletes all descendants recursively, with no opt-out.
 
@@ -945,13 +930,16 @@ Deleting a parent immediately soft-deletes all descendants recursively, with no 
 - Con : Destructive with no warning; easy to delete large trees accidentally
 - Con : A large tree (thousands of children) can cause the request to time out
 
-**Alternative C — Caller-controlled cascade (`?cascade=true`) — previously chosen**
+</details>
+
+<details>
+<summary><strong>Alternative C — Caller-controlled cascade (`?cascade=true`) — previously chosen</strong></summary>
 
 Default behavior is Restrict. The caller passes `?cascade=true` to opt into recursive soft-delete. `EntityDescriptor.AllowCascadeDelete` controls whether the flag is accepted.
 
 ```
 DELETE /clusters/{id}              → 409 Conflict (has active children)
-DELETE /clusters/{id}?cascade=true → 204 No Content
+DELETE /clusters/{id}?cascade=true → 202 Accepted
 ```
 
 - Pro : Explicit: the caller signals intent at the call site
@@ -959,6 +947,8 @@ DELETE /clusters/{id}?cascade=true → 204 No Content
 - Con : Behavior is split between the API call and the descriptor — two places to understand
 - Con : All children of a parent cascade or restrict uniformly; different policies per child type require multiple `AllowCascadeDelete` flags and more complex handler logic
 - Con : Clients must know to pass the flag; forgetting it returns 409 even when cascade is the only sensible behavior
+
+</details>
 
 **Why chosen (descriptor-driven `OnParentDelete`):** The policy belongs to the child entity, not to the caller or the API call. Different child types of the same parent can legitimately require different behaviors — cascade for NodePools, restrict for hypothetical audit-log children — which a single `?cascade=true` flag cannot express. Placing the policy on the child's descriptor makes behavior inspectable at startup, eliminates a query parameter from the API surface, and keeps the `Delete` handler trivially simple.
 
@@ -968,7 +958,7 @@ We have to have in mind that there will be a hard deletion option with `?force=t
 
 ### 10.3 Entity configuration: where entity types are defined
 
-**Chosen:** Entity descriptors declared in the application's existing config YAML file. The server reads them at startup to populate the registry. No Go code is required for standard entities.
+**Chosen:** Entity descriptors declared in the application's existing config YAML file, with startup validation that cross-checks every descriptor against the provider's OpenAPI spec. The server reads them at startup to populate the registry. No Go code is required for standard entities.
 
 ```yaml
 # config.yaml — entities section
@@ -982,20 +972,84 @@ entities:
     searchDisallowedFields: [spec]
 ```
 
+**Config–OpenAPI sync enforcement:**
+
+The `EntityDescriptor` contains fields that reference the provider's OpenAPI spec (e.g., `SpecSchemaName: ClusterSpec`). These two artifacts — the config YAML and the OpenAPI spec at `server.openapi_schema_path` — must stay in sync. The design enforces this at two levels:
+
+1. **Startup validation** — `registry.Validate()` loads the OpenAPI document and asserts that every descriptor's `SpecSchemaName` resolves to an existing schema component. A missing schema causes a startup panic with a descriptive message naming the entity kind and the expected schema (e.g., `entity "Cluster": specSchemaName "ClusterSpec" not found in OpenAPI spec at <path>`). Additionally, if the resolved schema defines `minLength`/`maxLength` on the `name` property, these are cross-checked against the descriptor's `NameMinLen`/`NameMaxLen` — a mismatch produces a startup warning.
+
+2. **CI integration test** — A test loads the production config YAML and the provider's OpenAPI spec, runs `LoadFromConfig()` + `Validate()`, and fails the build on any mismatch. This catches drift before deployment and ensures no silent failures if the config or the OpenAPI spec evolves independently.
+
 - Pro : Adding a standard entity requires only a new config entry and a redeploy — no Go code
 - Pro : Config is readable, diffable, and reviewable without Go knowledge
 - Pro : Integrates with existing config management — same file, same deployment tooling, same GitOps workflows
-- Pro : `registry.Validate()` still catches misconfiguration (e.g., unknown `parentType`) at startup
-- Con : Config schema must be defined, validated, and kept in sync with `EntityDescriptor` as the struct evolves
+- Pro : `registry.Validate()` catches misconfiguration at startup: unknown `parentType`, missing OpenAPI schemas, name constraint divergence
+- Pro : Provider's OpenAPI spec remains clean and customer-facing — no HyperFleet-specific metadata injected
+- Con : Two artifacts (config YAML + OpenAPI spec) must stay in sync — but the contract is machine-verified at startup and in CI, not manually enforced
 - Con : Route registration still happens at startup; config must be fully loaded before the router is built. No hot-reload without a server restart
 
-**Why chosen (config file):** All current `EntityDescriptor` fields for Cluster and NodePool are plain config values — no custom `ValidateSpec` or `Authz` hooks exist. Defining entities in the application config eliminates all per-entity Go code while keeping the deployment and configuration model consistent. Entities needing custom hooks can still be registered programmatically alongside config-loaded descriptors. This is the right default; compiled Go descriptors remain available as an escape hatch.
+**Why chosen:** All current `EntityDescriptor` fields for Cluster and NodePool are plain config values — no custom hooks exist. Defining entities in the application config eliminates all per-entity Go code while keeping the deployment and configuration model consistent. The startup validation and CI test close the sync gap between config and OpenAPI, making mismatches fail-fast rather than silent. Compiled Go descriptors remain available as an escape hatch for entities that need behavior hooks.
 
-**Alternative A — Kubernetes CRDs**
+<details>
+<summary><strong>Alternative A — OpenAPI-augmented (x-hyperfleet vendor extensions)</strong></summary>
 
-Entity types are defined as Kubernetes Custom Resource Definitions. The API server watches the cluster and dynamically loads/unloads entity descriptors as CRDs are applied or removed.
+The provider's OpenAPI spec becomes the single configuration source. Each entity schema carries `x-hyperfleet` vendor extensions that declare the non-derivable descriptor fields. At startup, the server parses the OpenAPI file, discovers all schemas with `x-hyperfleet` extensions, and builds EntityDescriptors from them.
 
-An alternative to watch the cluster is to have the list of CRD files in a folder at boot time to serve as configuration
+```yaml
+# In the provider's OpenAPI spec
+ClusterSpec:
+  x-hyperfleet:
+    plural: clusters
+    requiredAdapters: [provisioner, lifecycle]
+    searchDisallowedFields: [spec]
+  properties:
+    name:
+      type: string
+      minLength: 3
+      maxLength: 53
+    # ... full spec schema
+```
+
+The entity kind is derived from the schema name (`ClusterSpec` → `Cluster`). `SpecSchemaName` is implicit — it is the schema itself. `NameMinLen`/`NameMaxLen` are read directly from the schema's `name` property constraints.
+
+- Pro : Single source of truth — no sync gap possible; if the schema is removed, its entity registration disappears
+- Pro : Providers already own and maintain the OpenAPI file
+- Pro : Name constraints cannot diverge — they come from the schema definition
+- Con : Pollutes the provider's customer-facing OpenAPI spec with internal infrastructure metadata (`x-hyperfleet`); code generators and API consumers see fields they cannot interpret
+- Con : `ParentType` and `OnParentDelete` create cross-references between schemas (e.g., `NodePoolSpec.x-hyperfleet.parentType: Cluster`) that are awkward to express and validate in OpenAPI
+- Con : Vendor extensions are opaque to standard OpenAPI tooling — linters, documentation generators, and SDK generators ignore them
+- Con : Providers must learn the `x-hyperfleet` extension schema and keep it correct alongside their own spec definitions
+
+</details>
+
+<details>
+<summary><strong>Alternative B — Thin config YAML + convention-based auto-discovery</strong></summary>
+
+Config YAML declares only fields that cannot be derived from OpenAPI: `Plural`, `ParentType`, `OnParentDelete`, `RequiredAdapters`, `SearchDisallowedFields`. The `SpecSchemaName` field is removed. Instead, the system uses a naming convention: entity kind `Cluster` maps to schema `ClusterSpec` (i.e., `{Kind}Spec`). `NameMinLen`/`NameMaxLen` are read from the schema's `name` property constraints at startup.
+
+```yaml
+entities:
+  - type: Cluster
+    plural: clusters
+    requiredAdapters: [provisioner, lifecycle]
+    searchDisallowedFields: [spec]
+```
+
+Startup validation confirms the derived schema exists and extracts name constraints. No manual `specSchemaName` to drift.
+
+- Pro : Reduces config surface — fewer fields that can desync with the OpenAPI spec
+- Pro : Name constraints have one source (the schema)
+- Pro : Provider's OpenAPI stays clean — no vendor extensions
+- Con : Rigid naming convention — breaks if a provider names their schema differently (e.g., `ClusterConfiguration` instead of `ClusterSpec`)
+- Con : Could add an optional `specSchemaName` override as an escape hatch, which reintroduces the sync risk for overridden entries
+- Con : Convention must be documented and enforced across all providers; a team that doesn't know the rule silently fails
+
+</details>
+
+<details>
+<summary><strong>Alternative C — Kubernetes CRDs</strong></summary>
+
+Entity types are defined as Kubernetes Custom Resource Definitions. The API server reads CRD files from a folder at boot time to populate the registry.
 
 ```yaml
 apiVersion: hyperfleet.io/v1alpha1
@@ -1011,16 +1065,21 @@ spec:
   requiredAdapters: [provisioner, lifecycle]
 ```
 
-- Pro : Entity types can be added/removed at runtime without redeploying the API serv
+CRDs can embed OpenAPI v3 validation schemas directly, so the spec schema itself is not duplicated. However, the provider must translate their existing OpenAPI spec into CRD format (`apiVersion`, `metadata`, `spec` wrapper), maintaining two representations of the same entities in different formats.
+
 - Pro : Standard Kubernetes extension mechanism — operators and GitOps workflows apply naturally
-- Pro : CRD schema validation (via OpenAPI v3 in the CRD spec) can enforce descriptor correctness
+- Pro : CRD schema validation (via OpenAPI v3 in the CRD spec) can enforce descriptor correctness at apply time
+- Pro : If the API server runs inside a Kubernetes cluster, CRDs can be watched for dynamic registration
 - Con : Requires the API server to run inside (or alongside) a Kubernetes cluster — rules out bare-metal or non-k8s deployments
-- Con : Dynamic route registration is fundamentally incompatible with gorilla/mux, which builds its routing tree at startup; routes cannot be added at runtime without restarting the router
+- Con : Dynamic route registration is fundamentally incompatible with gorilla/mux, which builds its routing tree at startup; routes cannot be added at runtime without restarting the router. CRD watching is limited to static boot-time loading.
 - Con : Adds a hard dependency on the Kubernetes API and `controller-runtime` or `client-go` — significant operational complexity
 - Con : Entity type changes become a cluster operation rather than a code change; harder to test locally
-- Con : Duplication of OpenAPI schemas. Providers already have their OpenAPI schema for their external API but now they have to break the types into CRDs and keep them aligned.
+- Con : Providers already maintain a complete OpenAPI spec with all entity schemas. CRDs require re-expressing entity metadata in Kubernetes-native format, adding a translation step that must be kept aligned with the OpenAPI source
 
-**Alternative B — Entity types in a database table**
+</details>
+
+<details>
+<summary><strong>Alternative D — Entity types in a database table</strong></summary>
 
 Entity types are stored in a `entity_types` table. The API server reads them at startup (or on each request) and builds descriptors dynamically.
 
@@ -1029,18 +1088,21 @@ Entity types are stored in a `entity_types` table. The API server reads them at 
 - Pro : Standard CRUD tooling can manage entity type definitions
 - Con : `RequiredAdapters` is a function of the runtime adapter config — it cannot be stored as a plain DB column; adapter requirements would need a separate join table or JSON column
 - Con : Dynamic route registration has the same problem as CRDs: gorilla/mux cannot add routes after startup without a server restart
-- Con : Behavior hooks (`ValidateSpec`, `Authz.ResourceCheck`) are Go functions — they cannot be stored in a DB row; only configuration can be persisted, not logic
+- Con : Behavior hooks (`ValidateSpec`) are Go functions — they cannot be stored in a DB row; only configuration can be persisted, not logic
 - Con : The DB becomes a source of truth for schema-level concerns, coupling schema evolution (migrations) with runtime configuration
 - Con : A misconfigured row (e.g., a `parentType` that doesn't exist) can corrupt the registry at runtime; the current design catches this at startup via `registry.Validate()`
-- Con: When creating a new environment, we need to populate the database with the entities. This makes less descriptive/GitOps operations
+- Con : When creating a new environment, we need to populate the database with the entities. This makes less descriptive/GitOps operations
 
-**Alternative C — Compiled Go descriptors**
+</details>
+
+<details>
+<summary><strong>Alternative E — Compiled Go descriptors</strong></summary>
 
 Entity types are declared as Go `EntityDescriptor` structs and registered at startup via `init()` — compiled directly into the binary.
 
 ```go
 func init() {
-    registry.Register(&registry.EntityDescriptor{
+    registry.Register(&registry.EntityDescriDtor{
         Type:           "Cluster",
         Plural:         "clusters",
         NameMinLen:     3,
@@ -1055,13 +1117,15 @@ func init() {
 ```
 
 - Pro : Type-safe: compiler catches missing fields and type mismatches
-- Pro : Behavior hooks (`Authz.ResourceCheck`, `RequiredAdapters` as a typed function) are natively expressible
+- Pro : Behavior hooks (`RequiredAdapters` as a typed function) are natively expressible
 - Pro : No config schema to define or keep in sync
 - Con : Adding a new entity type requires a Go code change and a new release — no config-only path
 - Con : `RequiredAdapters` as a function of runtime config is more indirection than needed for the current entity set
 - Con : Per-entity `init()` registration in plugin packages creates coupling between plugin structure and registry bootstrapping
 
-**Why not chosen:** All current entities (Cluster, NodePool) use only plain config values — no custom hooks exist. Requiring a Go change and release cycle for each new entity type adds unnecessary friction. The config file approach covers 100% of current use cases with less coupling. Go registration remains available as an escape hatch for entities that genuinely need behavior hooks.
+</details>
+
+**Why not chosen (alternatives A–E):** Alternative A (vendor extensions) eliminates the sync gap but pollutes the provider's customer-facing OpenAPI spec with internal metadata. Alternative B (convention-based) reduces config surface but imposes a rigid naming convention that providers may not follow. Alternative C (CRDs) adds Kubernetes infrastructure dependencies and requires providers to maintain entity metadata in a second format. Alternative D (database) couples schema concerns with runtime state and loses GitOps workflows. Alternative E (compiled Go) adds unnecessary release friction for what are currently plain config values. The chosen approach (config YAML + startup validation) preserves the simplicity of config-driven registration while machine-verifying the contract between config and OpenAPI spec — making mismatches fail-fast rather than silent.
 
 ---
 
@@ -1080,12 +1144,13 @@ Some alternative names for `Resource` could be selected.
 
 **Chosen: `Resource`**
 
-Standard REST vocabulary, recognized by API consumers across OpenAPI ecosystems and major cloud APIs (AWS, GCP, Azure all use "resource" for generic managed objects). The `type` discriminator field makes the concrete entity kind unambiguous regardless of the container name.
+Standard REST vocabulary, recognized by API consumers across OpenAPI ecosystems and major cloud APIs (AWS, GCP, Azure all use "resource" for generic managed objects). The `kind` discriminator field makes the concrete entity kind unambiguous regardless of the container name.
 
 - Con : "resource" is already a broad REST term that can refer to any endpoint, not specifically this type
-- Accepted : the `type` field disambiguates at the value level; callers always work with typed responses
+- Accepted : the `kind` field disambiguates at the value level; callers always work with typed responses
 
-**Alternative A — `Entity`**
+<details>
+<summary><strong>Alternative A — <code>Entity</code></strong></summary>
 
 Precise to the domain concept; avoids overloading the REST meaning of "resource".
 
@@ -1093,7 +1158,10 @@ Precise to the domain concept; avoids overloading the REST meaning of "resource"
 - Con : Creates terminology collision with `EntityDescriptor` in the registry — two distinct concepts share the word "entity", which makes the doc and code harder to follow
 - Con : Less familiar as an API surface term; most HTTP APIs use "resource" or "object"
 
-**Alternative B — `ManagedEntity`**
+</details>
+
+<details>
+<summary><strong>Alternative B — <code>ManagedEntity</code></strong></summary>
 
 Distinguishes HyperFleet-managed things from any other REST resources the API might expose.
 
@@ -1102,7 +1170,10 @@ Distinguishes HyperFleet-managed things from any other REST resources the API mi
 - Con : Verbose everywhere: `/managed-entities`, `ManagedEntity`, `ManagedEntityList`, `managed_entities`, `managed_entity_labels` — all table and type names grow
 - Con : The "managed" qualifier is implicit for everything served by this API; it adds no information
 
-**Alternative C — `Object`**
+</details>
+
+<details>
+<summary><strong>Alternative C — <code>Object</code></strong></summary>
 
 Used by Kubernetes for all API objects (`metav1.Object`, object store, etc.).
 
@@ -1110,6 +1181,8 @@ Used by Kubernetes for all API objects (`metav1.Object`, object store, etc.).
 - Con : Extremely generic — no domain signal at all
 - Con : `Object` in Go conventionally suggests `interface{}` or an untyped value, which conflicts with the concrete, typed struct this represents
 - Con : HyperFleet is not a Kubernetes API; importing Kubernetes naming without the Kubernetes machinery is likely to confuse rather than clarify
+
+</details>
 
 ---
 
@@ -1151,9 +1224,9 @@ Extend `ResourceCreateRequest` with an optional `owner_references` field:
 
 ```yaml
 ResourceCreateRequest:
-  required: [type, name, spec]
+  required: [kind, name, spec]
   properties:
-    type:             { type: string }
+    kind:             { type: string }
     name:             { type: string }
     spec:             { type: object, additionalProperties: true }
     labels:           { type: object, additionalProperties: { type: string } }
@@ -1177,7 +1250,7 @@ The service would validate that `owner_references` is present and refers to a va
 
 All entity types share the `resources` table. As the number of entity types and total row count grows, queries that filter by `type` (every list operation) compete for the same table, indexes, and WAL. A burst of writes for one entity type increases I/O pressure for all others.
 
-**Remediation:** The `idx_resources_type` index covers the common filter path and limits full-table scans. If a single entity type grows to dominate the table (tens of millions of rows), PostgreSQL declarative partitioning by the `type` column can be applied without changing the application — the table structure and GORM struct are unchanged. Monitor per-type row counts and query latency from the start so partitioning can be introduced before it becomes urgent.
+**Remediation:** The `idx_resources_kind` index covers the common filter path and limits full-table scans. If a single entity type grows to dominate the table (tens of millions of rows), PostgreSQL declarative partitioning by the `type` column can be applied without changing the application — the table structure and GORM struct are unchanged. Monitor per-type row counts and query latency from the start so partitioning can be introduced before it becomes urgent.
 
 ---
 
@@ -1202,7 +1275,7 @@ Both Cluster and NodePool share the following structure across all layers:
 
 | Layer | Shared fields / behavior |
 |---|---|
-| GORM model | `Meta` (ID, timestamps, soft delete), `Kind`, `Name`, `Href`, `CreatedBy`, `UpdatedBy`, `Spec` (JSONB), `Labels` (JSONB), `StatusConditions` (JSONB), `Generation` |
+| GORM model | `Meta` (ID, timestamps, soft delete), `Kind` (discriminator), `Name`, `Href`, `CreatedBy`, `UpdatedBy`, `Spec` (JSONB), `Labels` (JSONB), `StatusConditions` (JSONB), `Generation` |
 | DAO interface | `Get`, `Create`, `Replace`, `Delete`, `FindByIDs`, `All` |
 | Service interface | `Get`, `Create`, `Replace`, `Delete`, `All`, `FindByIDs`, `UpdateStatusFromAdapters`, `ProcessAdapterStatus` |
 | Handler | `List`, `Get`, `Create`, `Patch`, `Delete` via `handlerConfig` pipeline |
@@ -1240,120 +1313,3 @@ Both Cluster and NodePool share the following structure across all layers:
 
 ---
 
-## Appendix B. Authorization Design
-
-> **Note:** The current version of HyperFleet API contains inherited authorization code but it is not part of the official feature set. Implementation of this section is optional.
-
-Authorization is opt-in per entity type. When `EntityDescriptor.Authz` is `nil`, no authorization checks are performed — the handler incurs only two nil pointer checks per request.
-
-### B.1 `EntityAuthzConfig` (`pkg/registry/authz.go`)
-
-<details>
-<summary>EntityAuthzConfig struct</summary>
-
-```go
-// EntityAuthzConfig defines authorization requirements for an entity type.
-// nil means no authorization checks are performed for this entity.
-//
-// Split expressibility:
-//   - OperationPermissions: plain string map — expressible in config YAML.
-//   - ResourceCheck: Go function — requires descriptor registration in Go code.
-type EntityAuthzConfig struct {
-    // OperationPermissions maps HTTP method to a permission identifier.
-    // Only listed methods have permission checks applied.
-    // Expressible in the config YAML under authz.operationPermissions.
-    //
-    // Example:
-    //   http.MethodGet:    "hyperfleet.clusters.view"
-    //   http.MethodPost:   "hyperfleet.clusters.create"
-    //   http.MethodPatch:  "hyperfleet.clusters.update"
-    //   http.MethodDelete: "hyperfleet.clusters.delete"
-    OperationPermissions map[string]string
-
-    // ResourceCheck is an optional hook for per-resource authorization logic.
-    // Called after the operation permission check passes.
-    // resource is nil for List operations (no single resource in scope).
-    // Use this for ownership checks, tenant isolation, etc.
-    // Cannot be expressed in config — requires Go registration via Register().
-    ResourceCheck func(r *http.Request, resource *api.Resource) *errors.ServiceError
-}
-```
-
-</details>
-
-### B.2 Check pattern in handlers
-
-<details>
-<summary></summary>
-
-```go
-func (h *ResourceHandler) checkOperationAuthz(r *http.Request, method string) *errors.ServiceError {
-    if h.descriptor.Authz == nil { return nil }
-    perm, ok := h.descriptor.Authz.OperationPermissions[method]
-    if !ok { return nil }
-    return h.authzMiddleware.CheckPermission(r.Context(), perm)
-}
-
-func (h *ResourceHandler) checkResourceAuthz(r *http.Request, resource *api.Resource) *errors.ServiceError {
-    if h.descriptor.Authz == nil || h.descriptor.Authz.ResourceCheck == nil { return nil }
-    return h.descriptor.Authz.ResourceCheck(r, resource)
-}
-```
-
-</details>
-
-Operation permission is checked before any DAO call (fast path). Resource-level check is called after the resource is fetched (has access to resource fields).
-
-### B.3 Enabling auth for an entity
-
-No handler or infrastructure changes are needed.
-
-**Config-only (operation permissions):** For standard entities, `operationPermissions` is a plain string map and can be declared in the config YAML. This covers the common case of per-operation access control with no Go code required.
-
-<details>
-<summary>Config-based auth (operationPermissions only)</summary>
-
-```yaml
-entities:
-  - type: Cluster
-    plural: clusters
-    # ...
-    authz:
-      operationPermissions:
-        GET: hyperfleet.clusters.view
-        POST: hyperfleet.clusters.create
-        PATCH: hyperfleet.clusters.update
-        DELETE: hyperfleet.clusters.delete
-```
-
-</details>
-
-**Go registration (ResourceCheck):** Entities that also need per-resource ownership or tenant isolation logic register the descriptor in Go. `ResourceCheck` is a function and cannot be expressed in YAML.
-
-<details>
-<summary>Go-based auth (ResourceCheck escape hatch)</summary>
-
-```go
-registry.Register(&registry.EntityDescriptor{
-    Type:   "Cluster",
-    Plural: "clusters",
-    // ...
-    Authz: &registry.EntityAuthzConfig{
-        OperationPermissions: map[string]string{
-            http.MethodGet:    "hyperfleet.clusters.view",
-            http.MethodPost:   "hyperfleet.clusters.create",
-            http.MethodPatch:  "hyperfleet.clusters.update",
-            http.MethodDelete: "hyperfleet.clusters.delete",
-        },
-        ResourceCheck: func(r *http.Request, resource *api.Resource) *errors.ServiceError {
-            org := auth.GetOrgFromContext(r.Context())
-            if resource.Labels["org"] != org {
-                return errors.Forbidden("HYPERFLEET-FBD-001", "resource belongs to a different organization")
-            }
-            return nil
-        },
-    },
-})
-```
-
-</details>
