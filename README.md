@@ -39,6 +39,7 @@ Last Updated: 2025-11-07
 - [Searching for Technical Debt](#searching-for-technical-debt)
 - [Examples](#examples)
 - [FAQ](#faq)
+- [Contributing Setup](#contributing-setup)
 - [Related Resources](#related-resources)
 - [Contact](#contact)
 
@@ -340,6 +341,9 @@ All HyperFleet team developers have approve and merge access. **Goal**: Move fas
 **Find or record an architecture decision**
 → See `hyperfleet/adr/` — follow the template in `hyperfleet/adr/README.md`
 
+**Understand team processes and workflow**
+→ See `hyperfleet/docs/working-agreement.md`
+
 ---
 
 ## Writing Guidelines
@@ -484,6 +488,12 @@ Create new documents when:
 - Adding a completely new component
 - Major redesign that deprecates old approach
 - New feature guide or operational procedure
+
+---
+
+## Contributing Setup
+
+Install [pre-commit](https://pre-commit.com/#install) and run `make install-hooks` to enable local commit validation. See the [Pre-Commit Hooks Setup Guide](hyperfleet/docs/pre-commit-hooks.md) for details.
 
 ---
 

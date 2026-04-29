@@ -1,7 +1,7 @@
 ---
 Status: Active
 Owner: HyperFleet Platform Team
-Last Updated: 2026-03-19
+Last Updated: 2026-04-24
 ---
 
 # HyperFleet Commit Message Standard
@@ -65,7 +65,7 @@ HYPERFLEET-XXX - <type>: <subject>
 [optional footer(s)]
 ```
 
-When there is no associated JIRA ticket:
+When there is no associated JIRA ticket (e.g., intermediate commits during development):
 
 ```text
 <type>: <subject>
@@ -77,6 +77,8 @@ When there is no associated JIRA ticket:
 
 The **header** is mandatory.
 
+> **Note:** PR titles **always** require the JIRA prefix (`HYPERFLEET-XXX - <type>: <subject>`). Since HyperFleet uses squash merges, the PR title becomes the final commit on `main` and must be traceable to a JIRA ticket.
+
 ### Character Limits
 
 **Subject line:** The `<type>: <subject>` portion (excluding JIRA ticket prefix) MUST NOT exceed 72 characters.
@@ -86,12 +88,12 @@ The **header** is mandatory.
 **Examples:**
 
 Good - `<type>: <subject>` is less than 72 characters:
-```
+```text
 HYPERFLEET-123 - feat: add comprehensive cluster validation with adapters
 ```
 
 Bad - `<type>: <subject>` exceeds 72 characters:
-```
+```text
 HYPERFLEET-123 - feat: add comprehensive cluster validation logic for all cloud providers globally
 ```
 
@@ -186,17 +188,26 @@ Update all references from .phase to .status in your code.
 
 ## Enforcement
 
-This standard will be enforced through automated tooling:
+This standard is enforced through automated tooling at two levels:
 
-### CI Validation (Planned)
+### CI Validation
 
-- **GitHub Actions** with [commitlint](https://commitlint.js.org/) to validate commit messages on pull requests
-- PR titles must also follow this format for squash merges
-- See [HYPERFLEET-432](https://issues.redhat.com/browse/HYPERFLEET-432) for implementation status
+- **Prow** runs [`hyperfleet-hooks commitlint --pr`](https://github.com/openshift-hyperfleet/hyperfleet-hooks) on every pull request to validate all commit messages and the PR title
+- PR titles **MUST** include a JIRA prefix (`HYPERFLEET-XXX - <type>: <subject>`) because squash merges use the PR title as the final commit message
+- See the [commitlint documentation](https://github.com/openshift-hyperfleet/hyperfleet-hooks/blob/main/docs/commitlint.md) for Prow configuration details
 
-### Local Development (Optional)
+### Local Development (Recommended)
 
-Developers may optionally configure local commit hooks using [husky](https://typicode.github.io/husky/) for immediate feedback during development.
+Developers **SHOULD** install [pre-commit](https://pre-commit.com/) hooks for immediate feedback during development. The [`hyperfleet-hooks`](https://github.com/openshift-hyperfleet/hyperfleet-hooks) repository provides a centralized hook registry that validates commit messages locally before push.
+
+Quick setup:
+
+```bash
+pip install pre-commit
+make install-hooks
+```
+
+See the [Pre-Commit Hooks Setup Guide](../docs/pre-commit-hooks.md) for full installation instructions, project configuration examples, and migration guide.
 
 ---
 

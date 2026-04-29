@@ -1,7 +1,7 @@
 ---
 Status: Active
 Owner: HyperFleet Platform Team
-Last Updated: 2026-03-17
+Last Updated: 2026-04-24
 ---
 
 # Linting and Static Analysis Standard
@@ -248,18 +248,20 @@ lint:
     golangci-lint run ./...
 ```
 
-### Pre-commit Hook (Optional)
+### Pre-commit Hook (Recommended)
 
-Repositories MAY use pre-commit hooks for local linting:
+Repositories **SHOULD** use the centralized [`hyperfleet-hooks`](https://github.com/openshift-hyperfleet/hyperfleet-hooks) for local linting via pre-commit. This delegates to `make lint`, which uses the repo's bingo-managed golangci-lint version:
 
 ```yaml
 # .pre-commit-config.yaml
 repos:
-  - repo: https://github.com/golangci/golangci-lint
-    rev: v2.1.6
+  - repo: https://github.com/openshift-hyperfleet/hyperfleet-hooks
+    rev: v0.1.1
     hooks:
-      - id: golangci-lint
+      - id: hyperfleet-golangci-lint
 ```
+
+See the [Pre-Commit Hooks Setup Guide](../docs/pre-commit-hooks.md) for full configuration details.
 
 ## Version Requirements
 

@@ -1,7 +1,7 @@
 ---
 Status: Active
 Owner: HyperFleet Platform Team
-Last Updated: 2026-03-07
+Last Updated: 2026-04-24
 ---
 
 # HyperFleet Makefile Conventions
@@ -91,6 +91,11 @@ Repositories **MAY** implement these targets if applicable:
 | `image-dev` | Build and push to personal registry | For fast dev iteration with lightweight base image | `QUAY_USER=me make image-dev` |
 | `deploy` | Deploy to environment | If repo has deployment logic | Deploy to dev/staging |
 | `run` | Run the application locally | For services that can run standalone | Start local server |
+| `install-hooks` | Install pre-commit hooks | If repo uses [pre-commit](https://pre-commit.com/) for local validation | `pre-commit install` |
+| `gofmt` | Check Go formatting | Go repos using [pre-commit hooks](https://github.com/openshift-hyperfleet/hyperfleet-hooks) | Alias for `fmt` |
+| `go-vet` | Run go vet | Go repos using [pre-commit hooks](https://github.com/openshift-hyperfleet/hyperfleet-hooks) | Alias for `vet` |
+
+> **Note:** `gofmt` and `go-vet` are optional in general, and become **required for repositories with Go code** that use the `hyperfleet-gofmt` and `hyperfleet-go-vet` hooks. In non-Go repositories, these hooks are skipped via Go file filtering. See the [Pre-Commit Hooks Setup Guide](../docs/pre-commit-hooks.md) for details.
 
 ### Example: Optional targets
 

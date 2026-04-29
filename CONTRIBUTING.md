@@ -23,13 +23,17 @@ cd architecture
 
 # 2. Install linting tools (recommended before submitting PRs)
 npm install -g markdownlint-cli2 markdown-link-check   # Markdown linting and link checking
-pip install yamllint                                    # YAML linting
+pip install yamllint pre-commit                         # YAML linting and git hooks
+
+# 3. Install git hooks
+make install-hooks
 ```
 
 **First-time setup notes:**
 
 - No build step required — this is a documentation repository
 - The CI pipeline runs `markdownlint`, `yamllint`, and link checking automatically on PRs
+- `make install-hooks` installs pre-commit hooks for commit message validation and file hygiene — see [Pre-Commit Hooks Setup Guide](hyperfleet/docs/pre-commit-hooks.md)
 - Run linting locally before pushing to catch issues early
 - If using Claude Code for AI-assisted editing, see [CLAUDE.md](CLAUDE.md) for repository-specific guidelines
 
@@ -84,6 +88,8 @@ Use the scripts in `hack/` to run linting locally before pushing:
 ---
 
 ## Submitting Changes
+
+> For the full team workflow — from picking up a ticket to closing it — see the [Working Agreement](hyperfleet/docs/working-agreement.md).
 
 1. **Create a branch** from `main`:
 
