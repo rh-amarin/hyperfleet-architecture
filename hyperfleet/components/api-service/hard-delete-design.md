@@ -39,7 +39,7 @@ Last Updated: 2026-04-23
 ### Out of Scope
 
 - **Pending deletion** (setting `deleted_time`, cascading to subresources) — covered by [Adapter Deletion Flow Design](../adapter/framework/adapter-deletion-flow-design.md)
-- **Force deletion** — requires a separate spike; depends on peer team requirements
+- **Force deletion** — covered by [Force Deletion Design](../../docs/force-deletion-design.md)
 - **Retention window + CronJob** — viable but deferred; see [ADR 0012 Alternatives](../../adrs/0012-hard-delete-mechanism-after-adapter-reconciliation.md#alternatives-considered)
 
 ---

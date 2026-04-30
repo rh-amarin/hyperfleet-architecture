@@ -45,7 +45,7 @@ Last Updated: 2026-04-12
 
 ### Out of Scope
 
-- **Force deletion** — behavior and approach (e.g., immediate hard delete, graceful escalation, manual intervention) requires a separate spike; depends on peer team requirements
+- **Force deletion** — covered by [Force Deletion Design](../../../docs/force-deletion-design.md)
 - **API hard-deletion mechanism** — the actor and pattern for hard-deleting DB records (inline, background job, customer-triggered, retention window) is covered by [HYPERFLEET-904](https://redhat.atlassian.net/browse/HYPERFLEET-904) — see [Hard-Delete Design](../../api-service/hard-delete-design.md)
 - Cleanup job support (run a job before deleting resources) — future enhancement
 - Per-resource deletion retry — Sentinel reconciliation loop re-triggers the full adapter; fine-grained per-resource retry is a future enhancement
@@ -633,7 +633,7 @@ Detailed metric naming, labels, alert thresholds, and SLO/SLI definitions will b
 | 2 | **Stale Applied=False before `deleted_time`** | **API gates on aggregate `Reconciled` (computed from adapter `Finalized`), never on individual adapter `Applied`** | **Critical** |
 | 3 | Creation in-flight when deletion starts | Discovery handles naturally on next event | Low |
 | 4 | Which adapters must confirm? | Only adapters with existing status entries | Medium |
-| 5 | Stuck in Finalizing (`deleted_time` set but can't hard-delete) | Configurable timeout + alerting (force deletion covered separately) | Medium |
+| 5 | Stuck in Finalizing (`deleted_time` set but can't hard-delete) | Configurable timeout + alerting (see [Force Deletion Design](../../../docs/force-deletion-design.md)) | Medium |
 | 6 | Concurrent deletion events | Idempotent operations, K8s handles safely | Low |
 | 7 | Independent subresource deletion | Same pattern, check subresource `deleted_time` | Low |
 | 8 | Cancel deletion | Not cancellable in 1.0.0 | Low |
@@ -713,7 +713,7 @@ No grace period is needed — deletion `Reconciled` remains `False` until all ad
 
 #### Stuck in Finalizing (#5)
 
-If a resource stays in Finalizing (`deleted_time` set) beyond a configurable timeout (e.g., 30 minutes): log which adapters haven't confirmed and expose stuck state via API. Force deletion behavior is out of scope for this design and requires a separate spike. The approach (e.g., immediate hard delete, graceful escalation, or manual intervention) depends on peer team requirements and has not been decided yet.
+See [Force Deletion Design](../../../docs/force-deletion-design.md).
 
 #### Concurrent Events During Deletion (#6)
 
