@@ -1,7 +1,7 @@
 ---
 Status: Draft
 Owner: HyperFleet Team
-Last Updated: 2026-04-30
+Last Updated: 2026-05-01
 ---
 
 # Force Deletion Design
@@ -11,6 +11,7 @@ Last Updated: 2026-04-30
 **Related**:
 - [Adapter Deletion Flow Design](../components/adapter/framework/adapter-deletion-flow-design.md)
 - [Hard Delete Design](../components/api-service/hard-delete-design.md)
+- [ADR 0013 — Force Delete Scope: Database-Only](../adrs/0013-force-delete-scope-db-only.md)
 
 ---
 
@@ -113,7 +114,7 @@ Sentinel owns stuck detection. It exposes a gauge metric aggregated by `resource
 
 - `hyperfleet_sentinel_finalizing_resources` (gauge): count of resources currently in `Finalizing` state
 
-A Prometheus alert rule on this gauge (e.g., `finalizing_resources > 0 for 30m`) detects stuck deletions. To identify specific stuck resources, operators query the API via TSL filtering on `deleted_time`.
+A Prometheus alert rule on this gauge (e.g., `finalizing_resources > 0 for 30m`) detects stuck deletions. To identify specific stuck resources, operators query the API via TSL (Tag Search Language) filtering on `deleted_time`.
 
 ---
 
@@ -133,12 +134,15 @@ The force-delete endpoint requires a `reason` in the request body. The reason is
 
 ### What We Lose / What Gets Harder
 
-- K8s resources managed by adapters may be orphaned if adapters did not finish cleanup before force delete
+- K8s resources managed by adapters may be orphaned if adapters did not finish cleanup before force delete. Force delete is scoped to DB records only and does not attempt infrastructure cleanup. See [ADR 0013 — Force Delete Scope: Database-Only](../adrs/0013-force-delete-scope-db-only.md) for the full decision and extension path.
+- The `/admin/` path prefix deviates from the API versioning standard (`/api/hyperfleet/{version}/`). Force delete is an operational escape hatch, not a versioned resource API.
+- Audit trail for force-delete actions depends on log retention, which the team does not control. If logs expire before an incident investigation, the record of when and why a force-delete occurred is lost.
 
 ### Acceptable Because
 
 - Force delete is a privileged, manual operation. The admin accepts the consequences when they invoke it.
-- Orphaned K8s resources can be cleaned up manually or via a future garbage collector.
+- Orphaned K8s resources can be cleaned up manually. If orphaned infrastructure becomes a recurring problem, the design can be extended with a dedicated cleanup endpoint or cleanup adapter/controller without changing the existing force-delete API contract (see [ADR 0013](../adrs/0013-force-delete-scope-db-only.md#extension-path)).
+- Force-delete is expected to be rare (manual escape hatch for stuck deletions). Structured logging with the required `reason` field provides sufficient auditability for the expected volume. If log-based audit proves insufficient, the design can be extended with a dedicated audit table that the team controls, without changes to the API contract.
 
 ---
 

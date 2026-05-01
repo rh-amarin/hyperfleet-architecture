@@ -88,3 +88,4 @@ What did we decide? State it plainly.
 | [0010](0010-jsonb-provider-agnostic-spec.md) | JSONB for Provider-Agnostic Cluster and NodePool Spec Storage | Active | 2026-04-15 |
 | [0011](0011-testcontainers-for-integration-tests.md) | Testcontainers for Integration Tests | Active | 2026-04-16 |
 | [0012](0012-hard-delete-mechanism-after-adapter-reconciliation.md) | Hard-Delete Ownership and Execution | Proposed | 2026-04-23 |
+| [0013](0013-force-delete-scope-db-only.md) | Force Delete Scope: Database-Only | Proposed | 2026-05-01 |
