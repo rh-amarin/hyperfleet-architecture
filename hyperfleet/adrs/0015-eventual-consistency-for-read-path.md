@@ -8,21 +8,21 @@ Last Updated: 2026-05-08
 
 ## Context
 
-Sentinels and adapters poll the API continuously, resulting in high read traffic volume. To avoid additional latency and connection pool pressure, the transaction middleware skips transaction creation for read operations (GET requests).
+Sentinels and adapters poll the API continuously, resulting in high read traffic volume. To avoid additional latency and connection pool pressure, the transaction middleware skips transaction creation for read operations (GET requests). This means all read operations may return data that is slightly stale relative to concurrent writes.
 
-As a result, LIST endpoints execute COUNT and SELECT as two independent queries without a shared database transaction. Under concurrent modifications (inserts or deletes between the two queries), the reported `total` may not match the actual number of items returned, and pagination may skip or duplicate records.
+The most visible effect is on LIST endpoints, which execute COUNT and SELECT as two independent queries. Under concurrent modifications (inserts or deletes between the two queries), the reported `total` may not match the actual number of items returned, and pagination may skip or duplicate records.
 
 ## Decision
 
-Do not wrap LIST queries in a database transaction and do not use window functions to guarantee COUNT/SELECT consistency. This accepts eventual consistency on the read path.
+Do not use database transactions for read operations. This accepts eventual consistency on the entire read path. For LIST endpoints specifically, do not use window functions to guarantee COUNT/SELECT consistency.
 
 ## Consequences
 
-**Gains:** No additional latency on LIST endpoints. No additional database connection pool pressure from read transactions.
+**Gains:** No additional latency on read endpoints. No additional database connection pool pressure from read transactions.
 
-**Trade-offs:** Under concurrent modifications, clients may observe inaccurate total counts, skipped records, or duplicate records across pages.
+**Trade-offs:** Under concurrent modifications, clients may observe stale data on any GET request. For LIST endpoints specifically, this includes inaccurate total counts, skipped records, or duplicate records across pages.
 
-**Mitigations:** HyperFleet's reconciliation model naturally limits the impact. Sentinels and adapters repoll on intervals, so any inconsistency in a single LIST response is corrected on the next polling cycle.
+**Mitigations:** HyperFleet's reconciliation model naturally limits the impact. Sentinels and adapters repoll on intervals, so any inconsistency in a single response is corrected on the next polling cycle.
 
 ## Alternatives Considered
 
