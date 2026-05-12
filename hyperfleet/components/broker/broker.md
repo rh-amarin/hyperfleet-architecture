@@ -1,7 +1,7 @@
 ---
 Status: Active
 Owner: HyperFleet Architecture Team
-Last Updated: 2026-03-25
+Last Updated: 2026-05-12
 ---
 # HyperFleet Message Broker
 
@@ -226,6 +226,8 @@ type Publisher interface {
     Health(ctx context.Context) error
     // Close closes the underlying publisher
     Close() error
+    // BrokerType returns the configured broker type
+    BrokerType() string
 }
 ```
 
@@ -245,6 +247,8 @@ type Subscriber interface {
     Errors() <-chan *SubscriberError
     // Close closes the underlying subscriber
     Close() error
+    // BrokerType returns the configured broker type
+    BrokerType() string
 }
 ```
 
