@@ -1,7 +1,7 @@
 ---
-Status: Draft
+Status: Approved
 Owner: HyperFleet Architecture Team
-Last Updated: 2026-04-20
+Last Updated: 2026-05-08
 ---
 
 # Automated PR review strategy
@@ -43,20 +43,22 @@ A team discussion raised the question: _where is the juice worth the squeeze?_ C
 ### CodeRabbit
 
 - Integrated in HyperFleet repositories on the Red Hat Enterprise plan (no linked repository limit)
-- Current configuration is minimal (see `hypershift-fork/.coderabbit.yaml` for an example)
+- Central configuration deployed via [`openshift-hyperfleet/coderabbit`](https://github.com/openshift-hyperfleet/coderabbit) with `inheritance: true`
 - CodeRabbit automatically reads `CLAUDE.md` and `.cursorrules` files in each repo for coding standards — this is already active without explicit configuration
 - PR author must have a CodeRabbit license assigned to their GitHub username for full reviews to trigger
-- Features **not yet leveraged**:
-  - Custom code guidelines via `knowledge_base.code_guidelines` (can point to `AGENTS.md`, `.cursor/rules/`)
-  - Learnable rules that improve over time from reviewer feedback
-  - Linked dependent repos for cross-repo impact analysis
+- Features **now configured**:
+  - Custom code guidelines via `knowledge_base.code_guidelines` (reads `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`)
+  - Linked dependent repos for cross-repo impact analysis (architecture, API, Sentinel, Adapter, Broker)
   - Custom review instructions pointing to HyperFleet standards
-  - Path-specific review instructions (e.g., stricter rules for `cmd/` vs `pkg/`)
-  - `golangci-lint` and `gitleaks` integration
+  - Path-specific review instructions (`cmd/`, `config/`, `deploy/`, `charts/`, `migrations/`, `*_test.go`, `pkg/api/openapi/`)
+  - `golangci-lint`, `gitleaks`, `yamllint`, and `markdownlint` integration
+- Features **not yet available**:
+  - Learnable rules that improve over time from reviewer feedback (blocked — contractual data retention restriction)
+  - JIRA integration (not approved — security concerns)
 
 > **Note on learnable rules**: CodeRabbit's learnable rules improve when reviewers acknowledge its comments (resolve, dismiss, or reply). Responding to CodeRabbit comments should be treated as part of the PR review process, enforced by the team's code review practices — the same way we respond to human reviewer comments.
 >
-> **Caveat**: Learnable rules are currently **disabled** across all Red Hat CodeRabbit repos (internal and public) due to contractual requirements specifying no data retention (`knowledge_base.opt_out: true`). Data retention is under review by the PTLT team, but there is no timeline for when learnable rules might become available.
+> **Caveat**: Learnable rules are currently **disabled** across all Red Hat CodeRabbit repos (internal and public) due to contractual requirements specifying no data retention (`knowledge_base.opt_out: true`). Data retention is under review by the Platform Tools & Lifecycle Team (PTLT), but there is no timeline for when learnable rules might become available.
 
 #### CodeRabbit CLI (local)
 
@@ -92,13 +94,15 @@ For local developer workflows, the CLI is useful for quick pre-push reviews but 
 | Sequence diagram generation for changes | Active |
 | High-level PR summary | Active |
 | Path-based file filtering (vendor, generated) | Active |
-| `golangci-lint` integration | Configurable |
-| `gitleaks` secret scanning | Configurable |
+| `golangci-lint` integration | Active |
+| `gitleaks` secret scanning | Active |
+| `yamllint` / `markdownlint` integration | Active |
 | Automatic `CLAUDE.md` / `.cursorrules` reading | Active |
-| Custom code guidelines (point to standards files) | Not configured |
-| Learnable rules from reviewer feedback | Disabled (contractual data retention restriction) |
-| Linked repos for cross-repo analysis | Not configured |
-| Custom review instructions | Not configured |
+| Custom code guidelines (point to standards files) | Active |
+| Learnable rules from reviewer feedback | Blocked (contractual data retention restriction) |
+| Linked repos for cross-repo analysis | Active (architecture, API, Sentinel, Adapter, Broker) |
+| Custom review instructions | Active (path-specific + global) |
+| JIRA integration | Not approved (security concerns) |
 
 ### Claude Code review skill capabilities
 
@@ -116,7 +120,7 @@ For local developer workflows, the CLI is useful for quick pre-push reviews but 
 
 ### Overlap matrix
 
-This matrix considers CodeRabbit's full potential when properly configured (linked repos, custom guidelines, JIRA integration), not just the current minimal configuration.
+This matrix considers CodeRabbit's current configured state (linked repos, custom guidelines, path instructions, tool integrations). JIRA integration is not available.
 
 | Capability | CodeRabbit (configured) | Review Skill | Overlap? |
 | --- | --- | --- | --- |
@@ -126,7 +130,7 @@ This matrix considers CodeRabbit's full potential when properly configured (link
 | Error handling patterns | Yes | Yes (Go-specific) | Medium |
 | Performance patterns | Limited | Yes (Go-specific) | Low |
 | Concurrency safety (Go) | Limited | Yes | Low |
-| JIRA ticket validation | Partial (links PR to ticket, no comment-thread reading) | Yes (reads ticket + 50 comments) | Low |
+| JIRA ticket validation | Not available (integration not approved due to security concerns) | Yes (reads ticket + 50 comments) | None |
 | Architecture doc validation | Yes (via linked repo + custom instructions) | Yes | High |
 | Call-chain impact analysis | Partial (linked repos + full codebase context) | Yes (explicit caller/callee tracing) | Medium |
 | Doc-Code cross-referencing | Partial (via linked repo + custom instructions) | Yes (bidirectional, rigorous) | Medium |
@@ -147,23 +151,23 @@ This matrix considers CodeRabbit's full potential when properly configured (link
 
 ### What CodeRabbit can do when properly configured
 
-Several capabilities previously considered exclusive to the review skill can be partially or fully emulated by configuring CodeRabbit:
+Several capabilities previously considered exclusive to the review skill are now partially or fully covered by the current CodeRabbit configuration:
 
-| Capability | How to emulate in CodeRabbit | Gap remaining |
+| Capability | CodeRabbit configuration | Gap remaining |
 | --- | --- | --- |
-| Architecture doc validation | Link the `architecture` repo via `linked_repositories` + add custom instructions to validate against architecture docs | CodeRabbit reads the docs but does not enforce bidirectional validation rigorously — it may miss subtle drift |
-| HyperFleet standards enforcement | CodeRabbit already reads `CLAUDE.md` automatically for repo-local standards; cross-repo standards via `code_guidelines` pointing to linked architecture repo | High coverage — repo-local standards work out of the box, cross-repo standards require linked repos configuration |
-| Call-chain impact analysis | `linked_repositories` gives cross-repo context; CodeRabbit already analyzes full codebase | Does not do explicit caller/callee tracing, but detects many inconsistencies through context |
+| Architecture doc validation | Architecture repo linked via `linked_repositories` + custom instructions validate against architecture docs | CodeRabbit reads the docs but does not enforce bidirectional validation rigorously — it may miss subtle drift |
+| HyperFleet standards enforcement | `CLAUDE.md` read automatically; cross-repo standards via `code_guidelines` pointing to linked architecture repo | High coverage — minimal gap |
+| Call-chain impact analysis | `linked_repositories` gives cross-repo context; CodeRabbit analyzes full codebase | Does not do explicit caller/callee tracing, but detects many inconsistencies through context |
 | Doc-Code cross-referencing | Custom instructions + linked architecture repo | Partial — CodeRabbit can compare but does not systematically verify every claim in a design doc against the implementation |
 | Interactive fix application | GitHub "commit suggestion" feature in PR comments | Different UX (browser vs terminal), but solves the same problem — applying fixes |
-| JIRA ticket validation | CodeRabbit has JIRA integration (links PRs to tickets) | **Significant gap**: does not read JIRA comment threads to validate acceptance criteria refinements discussed after ticket creation |
-| Intra-PR consistency | General pattern detection across the diff | Partial — can be improved with custom instructions pointing to specific patterns to watch for |
+| JIRA ticket validation | Not available — JIRA integration not approved due to security concerns (PTLT) | **Full gap**: CodeRabbit cannot link PRs to tickets or validate acceptance criteria. Use the review skill for all JIRA validation |
+| Intra-PR consistency | Path-specific instructions + general pattern detection across the diff | Partial — improved with current path-specific instructions |
 
 ### What only the review skill can do
 
-After configuring CodeRabbit fully, the genuinely exclusive capability is:
+After configuring CodeRabbit fully, the genuinely exclusive capabilities are:
 
-- **JIRA comment-thread validation**: Reading all comments (up to 50) on a JIRA ticket to validate that acceptance criteria refinements — discussed in threads after the ticket was created — are implemented in the PR. No other tool reads JIRA ticket comments at this depth.
+- **JIRA ticket validation**: CodeRabbit's JIRA integration was not approved due to security concerns (PTLT). The review skill is the only tool that can link PRs to JIRA tickets and validate acceptance criteria — including reading all comments (up to 50) on a ticket to catch refinements discussed in threads after creation.
 
 ## Recommendation
 
@@ -181,16 +185,16 @@ Runs automatically on every PR with zero developer effort. Once properly configu
 - PR summary and walkthrough
 - Learnable rules that improve over time from reviewer feedback (pending data retention enablement — see [caveat above](#coderabbit))
 
-Configuration required (see [CodeRabbit configuration overview](https://docs.coderabbit.ai/guides/configuration-overview)):
+Configuration steps (see [CodeRabbit configuration overview](https://docs.coderabbit.ai/guides/configuration-overview)):
 
-1. **Link the architecture repo** via [`multi-repo analysis`](https://docs.coderabbit.ai/knowledge-base/multi-repo-analysis) so CodeRabbit can read standards and architecture docs
-2. **Add custom code guidelines** via [`knowledge_base.code_guidelines`](https://docs.coderabbit.ai/knowledge-base/code-guidelines) pointing to HyperFleet standards. Note: CodeRabbit already reads `CLAUDE.md` and `.cursorrules` files automatically for repo-local standards — `code_guidelines` adds explicit pointers and cross-repo standards via linked repositories
-3. **Add [path-specific review instructions](https://docs.coderabbit.ai/guides/review-instructions#path-specific-instructions)** for areas requiring stricter review (e.g., `cmd/`, `config/`, `deploy/`) — the default is generic ("focus on major issues"), so tailoring instructions per path improves signal quality
-4. **Add custom review instructions** directing CodeRabbit to validate changes against architecture docs and standards
-5. **Enable JIRA integration** to [link PRs to tickets](https://docs.coderabbit.ai/integrations/jira) automatically
-6. **Enable [learnable rules](https://docs.coderabbit.ai/knowledge-base/learnings)** so CodeRabbit improves from reviewer feedback — **blocked** until PTLT resolves the data retention restriction (see [caveat above](#coderabbit))
-7. **Set up [central configuration](https://docs.coderabbit.ai/configuration/central-configuration)** using CodeRabbit's inheritance system — settings cascade from enterprise → org UI → org `.coderabbit.yaml` → repo `.coderabbit.yaml` (highest priority). Define org-wide defaults and let individual repos override as needed
-8. **Enable `golangci-lint` and `gitleaks`** [integrations](https://docs.coderabbit.ai/tools/list)
+1. ~~**Link the architecture repo** via [`multi-repo analysis`](https://docs.coderabbit.ai/knowledge-base/multi-repo-analysis)~~ — done (architecture, API, Sentinel, Adapter, Broker linked)
+2. ~~**Add custom code guidelines** via [`knowledge_base.code_guidelines`](https://docs.coderabbit.ai/knowledge-base/code-guidelines)~~ — done (reads `CLAUDE.md`, `AGENTS.md`, `.cursor/rules/*.mdc`)
+3. ~~**Add [path-specific review instructions](https://docs.coderabbit.ai/guides/review-instructions#path-specific-instructions)**~~ — done (`cmd/`, `config/`, `deploy/`, `charts/`, `migrations/`, `*_test.go`, `pkg/api/openapi/`)
+4. ~~**Add custom review instructions**~~ — done (global + path-specific instructions validate against architecture standards)
+5. ~~**Enable JIRA integration**~~ — not approved due to security concerns (PTLT). May be revisited in the future. Use the `/review-pr` skill for JIRA ticket validation
+6. **Enable [learnable rules](https://docs.coderabbit.ai/knowledge-base/learnings)** — **blocked** until PTLT resolves the data retention restriction (see [caveat above](#coderabbit))
+7. ~~**Set up [central configuration](https://docs.coderabbit.ai/configuration/central-configuration)**~~ — done ([`openshift-hyperfleet/coderabbit`](https://github.com/openshift-hyperfleet/coderabbit) with `inheritance: true`)
+8. ~~**Enable `golangci-lint` and `gitleaks`** [integrations](https://docs.coderabbit.ai/tools/list)~~ — done (`yamllint` and `markdownlint` also enabled)
 
 > **Plan note — linked repositories**
 >
@@ -204,9 +208,10 @@ Configuration required (see [CodeRabbit configuration overview](https://docs.cod
 
 A developer chooses when to run it and what to do with each finding. The value is in the interactive workflow:
 
-- **Self-review mode**: review your own PR before requesting human review, choose to fix or skip each finding
-- **Comment mode**: review someone else's PR, choose to post inline comments or skip
-- **Depth on demand**: JIRA comment-thread validation, call-chain impact analysis, and doc-code cross-referencing run only when a human decides they are worth the time
+- **Pre-PR review** (`/review-local`): review your changes before opening a PR
+- **Self-review mode** (`/review-pr`): review your own PR before requesting human review, choose to fix or skip each finding
+- **Comment mode** (`/review-pr`): review someone else's PR, choose to post inline comments or skip
+- **Depth on demand**: JIRA ticket validation, call-chain impact analysis, and doc-code cross-referencing run only when a human decides they are worth the time
 
 The skill does not need CI automation because its value comes from human interaction — the developer decides what to act on. Automating it would strip the interactivity that makes it useful.
 
@@ -237,6 +242,15 @@ The risk label enables workflow differentiation: low-risk PRs can follow a fast 
 > **Implementation:** Tracked in [HYPERFLEET-991](https://redhat.atlassian.net/browse/HYPERFLEET-991). Recommended to run in "observe mode" for 2-3 sprints first — compute and label without gating — to calibrate thresholds against real data before enforcing merge policies.
 
 > **Measurement:** Use the existing [PR Cycle Time dashboard](https://metrics.dprod.io/dashboard.html?team=openshift-hyperfleet&dashboard=prcycletime) to track impact. Baseline (April 2026): median cycle time 14.3h, first review 6.5h, first approval 24.3h. After the observe period, compare these metrics to validate whether risk labels correlate with review speed and cycle time improvement.
+
+### Human reviewers remain accountable
+
+Automated tools assist but do not replace human judgment. Human reviewers are accountable for:
+
+- **Approving or rejecting PRs** — automated findings are advisory
+- **Preventing technical debt** — ensuring the codebase remains maintainable, well-structured, and free of unnecessary complexity
+- **Architectural alignment** — validating that changes fit the overall system design, not just pass mechanical checks
+- **Knowledge sharing** — PR reviews are a learning opportunity; automated tools cannot mentor or transfer context
 
 ## Trade-offs
 
