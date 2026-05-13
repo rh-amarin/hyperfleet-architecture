@@ -23,7 +23,7 @@ This document captures the key design decisions, trade-offs, and rationale behin
 2. [Kubernetes Resource Management](#2-kubernetes-resource-management-vs-in-process-execution)
 3. [Anemic Events Pattern](#3-anemic-events-pattern)
 4. [Condition-Based Status Reporting](#4-condition-based-status-reporting)
-5. [Adapters POST Status Updates](#5-adapters-post-status-updates)
+5. [Adapters PUT Status Updates](#5-adapters-put-status-updates)
 6. [Helm-Based Deployment](#6-helm-based-deployment)
 7. [Layered Configuration Architecture](#7-layered-configuration-architecture)
 8. [CEL Expression Language](#8-cel-expression-language)
@@ -178,20 +178,20 @@ observed_time: "..."         # Timestamp when status was reported
 
 ---
 
-## 5. Adapters POST Status Updates
+## 5. Adapters PUT Status Updates
 
-**Decision:** Adapters POST status updates directly to HyperFleet API without checking if status exists first.
+**Decision:** Adapters PUT status updates directly to HyperFleet API without checking if status exists first.
 
 **Why:**
 - **Simple flow** - single API call per status update
 - **API handles create-or-update** - server-side logic determines if creating or updating
-- **Idempotent** - same POST multiple times produces same result
-- **Less latency** - no GET call before POST
+- **Idempotent** - same PUT multiple times produces same result
+- **Less latency** - no GET call before PUT
 - **Stateless adapter** - adapter doesn't need to track if status exists
 
 **Implementation:**
 ```
-POST /api/hyperfleet/v1/clusters/{clusterId}/statuses
+PUT /api/hyperfleet/v1/clusters/{clusterId}/statuses
 {
   "adapter": "validation",
   "observed_generation": 1,

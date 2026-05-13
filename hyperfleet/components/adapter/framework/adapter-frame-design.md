@@ -103,7 +103,7 @@ graph TB
     BrokerLib -->|Connects| MessageBroker
     K8sClient -->|CRUD Operations| K8sAPI
     APIClient -->|REST Calls| HyperFleetAPI
-    Reporter -->|POST Status| HyperFleetAPI
+    Reporter -->|PUT Status| HyperFleetAPI
     
     Logger -.->|Used by| Components
     Errors -.->|Used by| Components
@@ -634,7 +634,7 @@ subscriber.Subscribe(ctx, func(ctx context.Context, msg []byte) error {
 #### Purpose
 - Evaluate tracked Kubernetes resources using CEL expressions
 - Build status payload with conditions (applied, available, health) and custom data
-- Report status to HyperFleet API via POST requests
+- Report status to HyperFleet API via PUT requests
 - Support conditional reporting based on expression evaluation
 - **Always executes**, even when preconditions fail or resources weren't created
 
@@ -772,7 +772,7 @@ subscriber.Subscribe(ctx, func(ctx context.Context, msg []byte) error {
 - Build status payload with evaluated conditions and data
 - Execute postActions (from `post.postActions`):
   - Evaluate `when` condition (if specified)
-  - POST status payload to HyperFleet API endpoint
+  - PUT status payload to HyperFleet API endpoint
   - Execute additional actions (e.g., logging)
 - Acknowledge message to broker
 
@@ -972,9 +972,9 @@ These patterns align with the workflow described in [Adapter Flow Diagrams](./ad
 - Kubernetes standard fields remain unchanged: `metadata.name`, `status.phase`
 
 ### Status Upsert Pattern
-- Adapters POST status updates to HyperFleet API: `POST /api/hyperfleet/v1/clusters/{resourceId}/statuses`
+- Adapters PUT status updates to HyperFleet API: `PUT /api/hyperfleet/v1/clusters/{resourceId}/statuses`
 - API handles create-or-update logic server-side (idempotent)
-- Same POST multiple times = same result
+- Same PUT multiple times = same result
 - Prevents race conditions between adapters
 
 ### Idempotency Pattern

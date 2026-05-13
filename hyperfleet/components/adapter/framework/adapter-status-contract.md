@@ -13,7 +13,7 @@ Last Updated: 2025-12-09
   - [Status Reporting Endpoint](#status-reporting-endpoint)
   - [Upsert Pattern](#upsert-pattern)
 - [Status Payload Structure](#status-payload-structure)
-  - [POST Request (Upsert ClusterStatus)](#post-request-upsert-clusterstatus)
+  - [PUT Request (Upsert ClusterStatus)](#put-request-upsert-clusterstatus)
 - [Required Fields](#required-fields)
   - [Adapter Status Request Fields](#adapter-status-request-fields)
   - [Condition Request Fields](#condition-request-fields)
@@ -48,7 +48,7 @@ Last Updated: 2025-12-09
   - [5. Always Report observed_generation and observed_time](#5-always-report-observed_generation-and-observed_time)
   - [6. Use Data Field for Structured Information](#6-use-data-field-for-structured-information)
   - [7. Handle Errors Gracefully](#7-handle-errors-gracefully)
-  - [8. Always Use POST](#8-always-use-post)
+  - [8. Always Use PUT](#8-always-use-put)
   - [9. Conditions: reason and message Are Optional](#9-conditions-reason-and-message-are-optional)
 - [Versioning](#versioning)
 - [References](#references)
@@ -71,21 +71,21 @@ This document defines the contract between HyperFleet adapters and the HyperFlee
 **Base URL**: `{hyperfleetApiBaseUrl}/api/hyperfleet/{hyperfleetApiVersion}/clusters/{clusterId}/statuses`
 
 **Method**:
-- `POST` - Upsert ClusterStatus (create or update)
+- `PUT` - Upsert ClusterStatus (create or update)
 
 ### Upsert Pattern
 
-Adapters **always use POST** for status reporting:
+Adapters **always use PUT** for status reporting:
 
 **API Behavior**:
 - The HyperFleet API handles the upsert logic server-side
 - If ClusterStatus doesn't exist: API creates it
 - If ClusterStatus exists: API updates the adapter's status within it
-- Idempotent: Same POST multiple times = same result
+- Idempotent: Same PUT multiple times = same result
 
 **Adapter Implementation**:
 - No need to GET first to check if status exists
-- Always POST to the same endpoint
+- Always PUT to the same endpoint
 - API handles create-or-update logic automatically
 - Simpler adapter code, fewer HTTP requests
 
@@ -93,9 +93,9 @@ Adapters **always use POST** for status reporting:
 
 ## Status Payload Structure
 
-### POST Request (Upsert ClusterStatus)
+### PUT Request (Upsert ClusterStatus)
 
-Always POST the adapter status in this structure:
+Always PUT the adapter status in this structure:
 
 ```json
 {
@@ -136,7 +136,7 @@ Always POST the adapter status in this structure:
 
 **Notes**:
 - The API will upsert this adapter status (create or update based on adapter name)
-- Other adapter statuses for this cluster are preserved (not affected by this POST)
+- Other adapter statuses for this cluster are preserved (not affected by this PUT)
 - API will set `created_time` and `last_report_time` automatically
 - API will add `last_transition_time` to each condition automatically
 
@@ -637,7 +637,7 @@ post:
             description: "Example resource must exist"
   postActions:
     - type: "api_call"
-      method: "POST"
+      method: "PUT"
       endpoint: "{{ .hyperfleetApiBaseUrl }}/api/{{ .hyperfleetApiVersion }}/clusters/{{ .clusterId }}/statuses"
       headers:
         - name: "Authorization"
@@ -654,7 +654,7 @@ post:
 3. **Evaluate Conditions**: Evaluate CEL expressions for applied, available, health
 4. **Evaluate Data**: Evaluate CEL expressions for custom data fields
 5. **Build Payload**: Construct status payload with conditions and data
-6. **Execute PostActions**: POST to HyperFleet API endpoint
+6. **Execute PostActions**: PUT to HyperFleet API endpoint
 
 ---
 
@@ -675,7 +675,7 @@ Content-Type: application/json
 ### Example Request
 
 ```http
-POST /api/v1/clusters/cls-123/statuses HTTP/1.1
+PUT /api/v1/clusters/cls-123/statuses HTTP/1.1
 Host: api.hyperfleet.example.com
 Authorization: Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...
 Content-Type: application/json
@@ -769,9 +769,29 @@ Use the `data` field for adapter-specific structured data that other components 
 
 Report adapter errors with `Health=False` and appropriate error messages.
 
-### 8. Always Use POST
+### 8. Always Use PUT
 
-Always POST to the same endpoint - the API handles upsert logic server-side for idempotency.
+Report status with **PUT** only. The API applies [upsert semantics](#upsert-pattern) on the status resource: the first write creates your adapter’s entry if needed; later writes replace that entry (other adapters’ statuses on the same cluster are unchanged). Repeating the same PUT is safe, so **retries after timeouts or `5xx` responses should replay the same request** rather than using a new verb or URL.
+
+- **One URL per cluster**: `PUT …/api/hyperfleet/{hyperfleetApiVersion}/clusters/{clusterId}/statuses` (same path every reconcile; no “create vs update” branch in the adapter).
+- **No prerequisite GET**: you do not need to read existing status before reporting.
+- **Headers**: `Authorization: Bearer <token>` and `Content-Type: application/json` (see [HTTP Headers](#http-headers)).
+
+```text
+  Adapter                                      HyperFleet API
+     |                                                   |
+     |  PUT /api/hyperfleet/{hyperfleetApiVersion}/      |
+     |      clusters/{clusterId}/statuses                |
+     |                                                   |
+     |  Authorization: Bearer <token>                    |
+     |  Content-Type: application/json                   |
+     |  -----------------------------------------------> |
+     |  adapter, observed_generation, observed_time,     |
+     |  conditions[], optional data, optional meta       |
+     |                                                   |
+     |  200 OK (created or updated)                      |
+     |  <----------------------------------------------- |
+```
 
 ### 9. Conditions: reason and message Are Optional
 

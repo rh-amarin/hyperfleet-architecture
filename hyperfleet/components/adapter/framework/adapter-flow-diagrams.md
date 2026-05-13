@@ -123,13 +123,7 @@ sequenceDiagram
             A->>A: Log skip reason (debug)
 
             Note over A: Report status - not applied
-            A->>API: GET /api/hyperfleet/v1/clusters/cls-123/statuses
-
-            alt ClusterStatus exists (200 OK)
-                A->>API: PATCH /statuses/{statusId}<br/>Applied=False, Available=False, Health=True
-            else ClusterStatus not found (404)
-                A->>API: POST /statuses<br/>Applied=False, Available=False, Health=True
-            end
+            A->>API: PUT /statuses<br/>Applied=False, Available=False, Health=True
 
             API-->>A: Status updated
             A->>B: Acknowledge message
@@ -143,13 +137,7 @@ sequenceDiagram
                 K-->>A: Resources created
 
                 Note over A: Report status - resources created
-                A->>API: GET /api/hyperfleet/v1/clusters/cls-123/statuses
-
-                alt ClusterStatus exists (200 OK)
-                    A->>API: PATCH /statuses/{statusId}<br/>Applied=True, Available=False, Health=True
-                else ClusterStatus not found (404)
-                    A->>API: POST /statuses<br/>Applied=True, Available=False, Health=True
-                end
+                A->>API: PUT /statuses<br/>Applied=True, Available=False, Health=True
 
                 API-->>A: Status updated
                 A->>B: Acknowledge message
@@ -160,13 +148,7 @@ sequenceDiagram
 
                 alt Postconditions NOT met (workload in progress)
                     Note over A: Workload still running
-                    A->>API: GET /api/hyperfleet/v1/clusters/cls-123/statuses
-
-                    alt ClusterStatus exists (200 OK)
-                        A->>API: PATCH /statuses/{statusId}<br/>Applied=True, Available=False, Health=True
-                    else ClusterStatus not found (404)
-                        A->>API: POST /statuses<br/>Applied=True, Available=False, Health=True
-                    end
+                    A->>API: PUT /statuses<br/>Applied=True, Available=False, Health=True
 
                     API-->>A: Status updated
                     A->>B: Acknowledge message
@@ -175,7 +157,7 @@ sequenceDiagram
                     alt Workload Succeeded
                         Note over A: Aggregate conditions
                         A->>A: Available=True (all conditions True)
-                        A->>API: PATCH /statuses/{statusId}<br/>Available=True, Applied=True, Health=True
+                        A->>API: PUT /statuses<br/>Applied=True, Available=False, Health=True
                         API-->>A: Status updated
 
                         Note over A: Check resource management
@@ -190,7 +172,7 @@ sequenceDiagram
                     else Workload Failed
                         Note over A: Aggregate conditions
                         A->>A: Available=False (workload failed)
-                        A->>API: PATCH /statuses/{statusId}<br/>Available=False, Applied=True, Health=True
+                        A->>API: PUT /statuses<br/>Applied=True, Available=False, Health=True
                         API-->>A: Status updated
 
                         Note over A: Check resource management
@@ -266,9 +248,9 @@ flowchart LR
 - `clusterId` enables parent-child relationships (e.g., nodepools → cluster)
 
 ### Status Upsert Pattern
-- Adapters POST status updates to HyperFleet API
+- Adapters PUT status updates to HyperFleet API
 - API handles create-or-update logic server-side
-- Idempotent: same POST multiple times = same result
+- Idempotent: same PUT multiple times = same result
 - Prevents race conditions between adapters
 
 ### Status Reporting Pattern
@@ -396,7 +378,7 @@ sequenceDiagram
     rect rgb(240, 255, 240)
         Note over Adapter: Post-Processing (always runs)
         Adapter->>Adapter: Evaluate conditions (CEL)
-        Adapter->>API: POST /resources/{id}/statuses (Applied=False)
+        Adapter->>API: PUT /resources/{id}/statuses (Applied=False)
     end
 
     Note over User, K8s: Phase 4 - API Aggregates & Deletes (Hierarchical)
@@ -524,12 +506,12 @@ sequenceDiagram
         Sentinel->>Sub_Adapter: CloudEvent (subresource)
         Sub_Adapter->>Sub_Adapter: Capture deleted_time, evaluate lifecycle.delete
         Sub_Adapter->>Sub_Adapter: Clean up subresource resources (per-resource ordering)
-        Sub_Adapter->>API: POST status (Applied=False, Health=True, Finalized=True)
+        Sub_Adapter->>API: PUT status (Applied=False, Health=True, Finalized=True)
     and Resource cleanup (in parallel)
         Sentinel->>Res_Adapter: CloudEvent (resource)
         Res_Adapter->>Res_Adapter: Capture deleted_time, evaluate lifecycle.delete
         Res_Adapter->>Res_Adapter: Clean up resource resources (per-resource ordering)
-        Res_Adapter->>API: POST status (Applied=False, Health=True, Finalized=True)
+        Res_Adapter->>API: PUT status (Applied=False, Health=True, Finalized=True)
     end
 
     API->>API: Subresource Reconciled=True?

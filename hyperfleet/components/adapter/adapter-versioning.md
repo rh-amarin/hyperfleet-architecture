@@ -233,7 +233,7 @@ When Sentinel introduces a breaking event schema change, follow the expand-contr
 - Report adapter status and provisioning results (WRITE)
 
 **Adapter status report payloads:**
-- When adapters report status or provisioning results, they POST/PUT to HyperFleet API endpoints
+- When adapters report status or provisioning results, they PUT to HyperFleet API endpoints
 - Status payload structure follows the API schema version from the imported API client library
 
 **API version targeting:**

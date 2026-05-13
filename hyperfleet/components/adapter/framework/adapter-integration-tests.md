@@ -95,7 +95,7 @@ pubsubContainer, err := testcontainers.GenericContainer(ctx, testcontainers.Gene
 apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
     // Handle GET /clusters/{id}
     // Handle GET /clusters/{id}/statuses
-    // Handle POST /clusters/{id}/statuses
+    // Handle PUT /clusters/{id}/statuses
     // Handle PATCH /clusters/{id}/statuses/{statusId}
 }))
 defer apiServer.Close()
@@ -104,7 +104,7 @@ defer apiServer.Close()
 **API Endpoints to Mock**:
 - `GET /api/hyperfleet/v1/clusters/{clusterId}` - Return cluster object
 - `GET /api/hyperfleet/v1/clusters/{clusterId}/statuses` - Return existing status or 404
-- `POST /api/hyperfleet/v1/clusters/{clusterId}/statuses` - Create/upsert status
+- `PUT /api/hyperfleet/v1/clusters/{clusterId}/statuses` - Create/upsert status
 - `PATCH /api/hyperfleet/v1/clusters/{clusterId}/statuses/{statusId}` - Update status
 
 **Request/Response Tracking**:
@@ -391,7 +391,7 @@ spec:
     postActions:
       - name: "reportStatus"
         apiCall:
-          method: "POST"
+          method: "PUT"
           url: "{{ .hyperfleetApiBaseUrl }}/api/hyperfleet/{{ .hyperfleetApiVersion }}/clusters/{{ .clusterId }}/statuses"
           body: "{{ .statusPayload }}"
           timeout: 30s
@@ -513,7 +513,7 @@ spec:
 2. Wait for adapter to process event (max 5 seconds)
 3. Verify API was called: `GET /clusters/cls-test-001`
 4. Verify Job was created in Kubernetes
-5. Verify status was reported: `POST /clusters/cls-test-001/statuses`
+5. Verify status was reported: `PUT /clusters/cls-test-001/statuses`
 
 **Expected Outcomes**:
 - ✅ Event consumed from broker

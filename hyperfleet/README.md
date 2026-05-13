@@ -143,7 +143,7 @@ Kubernetes resources (Jobs, Secrets, ConfigMaps, Services) created by adapters t
    - Fetches cluster details from API
    - Evaluates preconditions
    - Creates Kubernetes resources if conditions met
-   - Reports status → POST /clusters/{id}/statuses
+   - Reports status → PUT /clusters/{id}/statuses
 6. API aggregates adapter statuses → Updates cluster status
 7. Cycle repeats until cluster reaches Ready phase
 ```

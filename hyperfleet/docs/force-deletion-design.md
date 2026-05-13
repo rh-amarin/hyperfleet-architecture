@@ -102,7 +102,7 @@ Force delete also works on individual subresources. For example, a single stuck 
 
 Force delete requires no changes to Sentinel's polling or event publishing. Once records are removed from the DB, Sentinel has nothing to poll.
 
-Adapters may receive events for resources that have been force-deleted. When an adapter tries to GET the resource as a precondition or POST its status back to the API, the API returns 404. Adapters must handle this gracefully (log and move on, do not retry).
+Adapters may receive events for resources that have been force-deleted. When an adapter tries to GET the resource as a precondition or PUT its status back to the API, the API returns 404. Adapters must handle this gracefully (log and move on, do not retry).
 
 ---
 

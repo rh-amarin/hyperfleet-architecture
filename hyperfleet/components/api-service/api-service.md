@@ -34,7 +34,7 @@ The API is intentionally simple by design — it stores state and aggregates ada
 graph TD
     User([User / Operator]) -->|CRUD /clusters /nodepools| API[HyperFleet API\nport :8000]
     Sentinel[Sentinel] -->|Poll GET /clusters?labels=...| API
-    Adapter[Adapters] -->|POST /clusters/:id/statuses| API
+    Adapter[Adapters] -->|PUT /clusters/:id/statuses| API
     API -->|Read/Write| DB[(PostgreSQL)]
     API -->|Expose| Health[Health :8080\n/healthz /readyz]
     API -->|Expose| Metrics[Metrics :9090\n/metrics]
@@ -54,7 +54,7 @@ The primary HyperFleet resource. A cluster tracks desired state (`spec`) and cur
 | `/api/hyperfleet/v1/clusters/{id}` | GET | Get cluster by ID |
 | `/api/hyperfleet/v1/clusters/{id}` | PATCH | Update cluster spec |
 | `/api/hyperfleet/v1/clusters/{id}/statuses` | GET | List adapter status reports |
-| `/api/hyperfleet/v1/clusters/{id}/statuses` | POST | Report adapter status |
+| `/api/hyperfleet/v1/clusters/{id}/statuses` | PUT | Report adapter status |
 
 #### Node Pools
 
@@ -66,7 +66,7 @@ Groups of compute nodes nested under a cluster.
 | `/api/hyperfleet/v1/clusters/{id}/nodepools` | GET | List node pools for a cluster |
 | `/api/hyperfleet/v1/clusters/{id}/nodepools` | POST | Create node pool |
 | `/api/hyperfleet/v1/clusters/{id}/nodepools/{np_id}` | GET | Get node pool |
-| `/api/hyperfleet/v1/clusters/{id}/nodepools/{np_id}/statuses` | POST | Report adapter status |
+| `/api/hyperfleet/v1/clusters/{id}/nodepools/{np_id}/statuses` | PUT | Report adapter status |
 
 Both resources support:
 - **Pagination**: `page` and `size` query parameters
@@ -109,7 +109,7 @@ The `Ready` condition determines if the "state of the world" have been reconcile
 
 It is computed out of the different status reports coming from adapters that have to provide information about the their validity at current API resource `generation`
 
-This aggregated `Ready` condition is the primary signal consumed by Sentinel's CEL decision logic. The API performs this aggregation on every `POST /statuses` call so Sentinel always reads current state.
+This aggregated `Ready` condition is the primary signal consumed by Sentinel's CEL decision logic. The API performs this aggregation on every `PUT /statuses` call so Sentinel always reads current state.
 
 ### Generation Tracking
 
@@ -222,7 +222,7 @@ Why Rejected: the API gets an additional concern (publishing) and needs to guara
 | PostgreSQL 13+ | Primary data store for all resources and statuses |
 | Red Hat SSO / OCM | JWT token issuance and validation (production auth) |
 | Sentinel | Polls this API for resources; drives reconciliation |
-| Adapters | POST status updates to this API |
+| Adapters | PUT status updates to this API |
 
 ---
 

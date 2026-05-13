@@ -61,7 +61,7 @@ Implement a "HyperFleet Sentinel" service that continuously polls the HyperFleet
 
 Without the Sentinel, the cluster provisioning workflow has a critical gap:
 
-1. **No Reconciliation Loop**: After adapters complete their work and post status updates, nothing triggers subsequent adapters to check if they can now proceed
+1. **No Reconciliation Loop**: After adapters complete their work and put status updates, nothing triggers subsequent adapters to check if they can now proceed
 2. **Stuck Clusters**: Clusters remain in "pending" state indefinitely with no mechanism to retry failed operations
 3. **Manual Intervention Required**: Operators must manually trigger reconciliation or restart adapters
 4. **No Failure Recovery**: Transient failures cannot self-heal without a retry mechanism

@@ -48,13 +48,13 @@ Last Updated: 2026-04-23
 
 ### Overview
 
-The API hard-deletes DB records within the same `POST /adapter_statuses` request that computes `Reconciled=True`. No new endpoint or component is introduced. The API is the natural owner because it receives every adapter status report, aggregates conditions to compute `Reconciled`, and can hard-delete atomically within the same database transaction.
+The API hard-deletes DB records within the same `PUT /api/hyperfleet/v1/clusters/{cluster_id}/statuses` request that computes `Reconciled=True`. No new endpoint or component is introduced. The API is the natural owner because it receives every adapter status report, aggregates conditions to compute `Reconciled`, and can hard-delete atomically within the same database transaction.
 
 ### Service-Layer Ordering Enforcement (Primary Control)
 
 The **service layer** is the primary enforcement mechanism for bottom-up deletion ordering. This is a business rule, not a database concern.
 
-When the API receives `POST /clusters/{id}/adapter_statuses` with `Finalized=True`, the service layer:
+When the API receives `PUT /api/hyperfleet/v1/clusters/{cluster_id}/statuses` with `Finalized=True`, the service layer:
 
 1. Stores the adapter conditions as reported
 2. Computes `Reconciled` by checking **both**:
@@ -94,13 +94,13 @@ sequenceDiagram
     Sentinel-->>NPAdapter: CloudEvent (nodepool)
 
     CLAdapter->>CLAdapter: Clean up cluster-level K8s resources
-    CLAdapter->>API: POST /clusters/{id}/adapter_statuses (Finalized=True)
+    CLAdapter->>API: PUT /api/hyperfleet/v1/clusters/{cluster_id}/statuses (Finalized=True)
     API->>DB: Store cluster adapter conditions as reported
     API->>DB: Reconciled=False (nodepools still exist)
     API-->>CLAdapter: 200 OK
 
     NPAdapter->>NPAdapter: Clean up nodepool-level K8s resources
-    NPAdapter->>API: POST /nodepools/{id}/adapter_statuses (Finalized=True)
+    NPAdapter->>API: PUT /api/hyperfleet/v1/clusters/{cluster_id}/nodepools/{nodepool_id}/statuses (Finalized=True)
     API->>DB: Store nodepool adapter conditions as reported
     API->>DB: Nodepool Reconciled=True
     API->>DB: DELETE nodepool record and adapter_statuses
@@ -109,7 +109,7 @@ sequenceDiagram
     Sentinel->>API: Poll: cluster Reconciled=False
     Sentinel-->>CLAdapter: CloudEvent (cluster)
 
-    CLAdapter->>API: POST /clusters/{id}/adapter_statuses (Finalized=True)
+    CLAdapter->>API: PUT /api/hyperfleet/v1/clusters/{cluster_id}/statuses (Finalized=True)
     API->>DB: Store cluster adapter conditions as reported
     API->>DB: Reconciled=True (no nodepools remain)
     API->>DB: DELETE cluster record and adapter_statuses
@@ -131,7 +131,7 @@ sequenceDiagram
     participant API
     participant DB
 
-    CLAdapter->>API: POST /clusters/{id}/adapter_statuses (Finalized=True)
+    CLAdapter->>API: PUT /api/hyperfleet/v1/clusters/{cluster_id}/statuses (Finalized=True)
     API->>DB: BEGIN TRANSACTION
     API->>DB: Store cluster adapter conditions
     API->>DB: Compute Reconciled=True (no nodepools remain)
@@ -146,7 +146,7 @@ sequenceDiagram
         API-->>CLAdapter: 500 Internal Server Error
         Note over DB: Cluster remains with deleted_time set, Reconciled=False
         Note over CLAdapter: Sentinel will re-trigger on next poll cycle
-        CLAdapter->>API: POST /clusters/{id}/adapter_statuses (Finalized=True)
+        CLAdapter->>API: PUT /api/hyperfleet/v1/clusters/{cluster_id}/statuses (Finalized=True)
         Note over API: Retry hard-delete logic
     end
 ```

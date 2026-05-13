@@ -215,14 +215,14 @@ hyperfleet_adapter_resources_deleted_total{component="adapter-validation",versio
 **Labels**:
 - `adapter_name` - Name of the adapter
 - `api` - API being called: `hyperfleet`, `kubernetes`, `external`
-- `method` - HTTP method: `GET`, `POST`, `PATCH`, `DELETE`
+- `method` - HTTP method: `GET`, `POST`, `PATCH`, `DELETE`, `PUT`
 - `endpoint` - API endpoint (sanitized, no IDs): e.g., `/clusters/{id}`, `/statuses`
 - `status_code` - HTTP status code: `200`, `404`, `500`, etc.
 
 **Example**:
 ```prometheus
 hyperfleet_adapter_api_requests_total{component="adapter-validation",version="v1.0.0",adapter_name="validation",api="hyperfleet",method="GET",endpoint="/clusters/{id}",status_code="200"} 1523
-hyperfleet_adapter_api_requests_total{component="adapter-validation",version="v1.0.0",adapter_name="validation",api="hyperfleet",method="POST",endpoint="/statuses",status_code="200"} 1487
+hyperfleet_adapter_api_requests_total{component="adapter-validation",version="v1.0.0",adapter_name="validation",api="hyperfleet",method="PUT",endpoint="/statuses",status_code="200"} 1487
 hyperfleet_adapter_api_requests_total{component="adapter-validation",version="v1.0.0",adapter_name="validation",api="kubernetes",method="POST",endpoint="/namespaces/{ns}/jobs",status_code="201"} 1432
 hyperfleet_adapter_api_requests_total{component="adapter-validation",version="v1.0.0",adapter_name="validation",api="kubernetes",method="GET",endpoint="/namespaces/{ns}/jobs/{name}",status_code="200"} 2145
 ```

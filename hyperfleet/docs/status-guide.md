@@ -16,7 +16,7 @@ Last Updated: 2026-03-11
   - [Adapter Status Reporting Flow](#adapter-status-reporting-flow)
   - [Adapter Implementation Pattern](#adapter-implementation-pattern)
 - [The Adapter Status Contract](#the-adapter-status-contract)
-  - [Reporting Status: Always POST](#reporting-status-always-post)
+  - [Reporting Status: Always PUT](#reporting-status-always-put)
   - [CRITICAL: Always Update `last_updated_time`](#critical-always-update-last_updated_time)
   - [Implementation via Adapter Configuration (PR #18)](#implementation-via-adapter-configuration-pr-18)
   - [ClusterStatus Object Structure](#clusterstatus-object-structure)
@@ -130,17 +130,17 @@ HyperFleet uses a **condition-based status reporting contract** where adapters r
 |--------|----------|-------------|
 | **GET** | `/v1/clusters/{clusterId}` | Get cluster with aggregated status (phase + adapter availability) |
 | **GET** | `/v1/clusters/{clusterId}/statuses` | Get the ClusterStatus with all adapter statuses (optional - for querying) |
-| **POST** | `/v1/clusters/{clusterId}/statuses` | Adapter reports status (API handles upsert internally) |
+| **PUT** | `/v1/clusters/{clusterId}/statuses` | Adapter reports status (API handles upsert internally) |
 
 > **Note**: This document will be updated with references to the Adapter Configuration Framework from [PR #18](https://github.com/openshift-hyperfleet/architecture/pull/18) once it is merged. The PR introduces a declarative YAML-based system for adapter configuration, event handling, and status reporting.
 
 ### Adapter Status Reporting Flow
 
-When an adapter needs to report its status, it **always POSTs**. The API handles the upsert logic internally.
+When an adapter needs to report its status, it **always PUTs**. The API handles the upsert logic internally.
 
-#### Adapter Action: POST Status Report
+#### Adapter Action: PUT Status Report
 
-**POST** `/v1/clusters/{clusterId}/statuses`
+**PUT** `/v1/clusters/{clusterId}/statuses`
 
 ```json
 {
@@ -185,7 +185,7 @@ When an adapter needs to report its status, it **always POSTs**. The API handles
 **Response**: `200 OK` with updated ClusterStatus object (whether first report or subsequent update)
 
 **What Happens (API-side)**:
-1. API receives POST with `adapter` field identifying which adapter is reporting
+1. API receives PUT with `adapter` field identifying which adapter is reporting
 2. API finds the adapter entry in `adapter_statuses` array (or creates if first time)
 3. If first report: API INSERTs adapter with `created_at = now()`
 4. If subsequent report: API UPDATEs adapter, preserving `created_at` and updating `updated_at`
@@ -202,8 +202,8 @@ When an adapter needs to report its status, it **always POSTs**. The API handles
 
 ```javascript
 function reportStatus(clusterId, adapterStatus) {
-  // Adapter always POSTs - API decides if INSERT or UPDATE
-  POST /v1/clusters/{clusterId}/statuses
+  // Adapter always PUTs - API decides if INSERT or UPDATE
+  PUT /v1/clusters/{clusterId}/statuses
   body = {
     adapter: "dns",              // Identifies which adapter
     observed_generation: 1,
@@ -228,11 +228,11 @@ function reportStatus(clusterId, adapterStatus) {
 
 ## The Adapter Status Contract
 
-### Reporting Status: Always POST
+### Reporting Status: Always PUT
 
-Adapters **always POST** to report status. The API handles upsert internally (INSERT if first report, UPDATE if adapter already reported).
+Adapters **always PUT** to report status. The API handles upsert internally (INSERT if first report, UPDATE if adapter already reported).
 
-**Endpoint**: `POST /v1/clusters/{clusterId}/statuses`
+**Endpoint**: `PUT /v1/clusters/{clusterId}/statuses`
 
 **Payload Structure**: Adapters send just their status with `adapter` field identifying themselves:
 
@@ -355,9 +355,9 @@ Adapters generate this status payload using declarative configuration that defin
 
 1. **Status Evaluation Rules** - How to calculate each condition (Applied, Available, Health) based on resource state
 2. **Payload Templates** - How to construct the JSON payload with dynamic data
-3. **API Reporting Actions** - When and how to POST/PATCH to the HyperFleet API
+3. **API Reporting Actions** - When and how to PUT to the HyperFleet API
 
-**Example configuration snippet** (from PR #18):
+**Example configuration snippet**
 ```yaml
 postProcessing:
   statusEvaluation:
@@ -377,7 +377,7 @@ postProcessing:
 
   actions:
     - type: "api_call"
-      method: "PATCH"
+      method: "PUT"
       endpoint: "{{.hyperfleetApi}}/api/{{.version}}/clusters/{{.clusterId}}/statuses"
       body: "{{.clusterStatusPayload}}"
 ```
@@ -501,7 +501,7 @@ The ClusterStatus object is a **RESTful resource** that contains ALL adapter sta
 - ClusterStatus does NOT have a generation field - it reflects current observed state
 - Each adapter in `adapter_statuses` has `observed_generation` indicating which cluster generation it has reconciled
 - Cluster spec has `generation` (user's intent), adapters report `observed_generation` (observed state)
-- Adapters always POST with `adapter` field in payload - API handles upsert internally
+- Adapters always PUT with `adapter` field in payload - API handles upsert internally
 - API creates ClusterStatus on first report, updates adapter entry on subsequent reports
 - This is much more RESTful: `/clusters/{id}/statuses` represents the complete status of the cluster
 - Prevents scattered status objects - everything in one cohesive resource
@@ -1696,51 +1696,46 @@ policies:
 
 The following examples show **individual adapter status payloads** that adapters send. These become entries in the ClusterStatus `adapter_statuses` array.
 
-> **Implementation Note**: Once [PR #18](https://github.com/openshift-hyperfleet/architecture/pull/18) is merged, adapters will generate these payloads using declarative configuration. The `postProcessing.statusEvaluation` section in the adapter config defines how to calculate condition states (Applied, Available, Health) by evaluating resource state, and the `actions` section defines when to POST/PATCH these payloads to the HyperFleet API.
+> **Implementation Note**: Once [PR #18](https://github.com/openshift-hyperfleet/architecture/pull/18) is merged, adapters will generate these payloads using declarative configuration. The `postProcessing.statusEvaluation` section in the adapter config defines how to calculate condition states (Applied, Available, Health) by evaluating resource state, and the `actions` section defines when to PUT these payloads to the HyperFleet API.
 
 ### 1. Adapter Started (Job Created)
 
-**Scenario**: Validation adapter received event, created Job. This is the first adapter to report, so it POSTs to create the ClusterStatus.
+**Scenario**: Validation adapter received event, created Job. This is the first adapter to report. The API will create the ClusterStatus resource and add this adapter's status to the `adapter_statuses` array.
 
-**POST** `/v1/clusters/cls-123/statuses`
+**PUT** `/v1/clusters/cls-123/statuses`
 
 ```json
 {
-  "generation": 1,
-  "adapter_statuses": [
+  "adapter": "validation",
+  "observed_generation": 1,
+  "conditions": [
     {
-      "adapter": "validation",
-      "observed_generation": 1,
-      "conditions": [
-        {
-          "type": "Available",
-          "status": "False",
-          "reason": "JobRunning",
-          "message": "Validation Job is executing",
-          "last_transition_time": "2025-10-17T12:00:05Z"
-        },
-        {
-          "type": "Applied",
-          "status": "True",
-          "reason": "JobLaunched",
-          "message": "Kubernetes Job 'validation-cls-123-gen1' created successfully",
-          "last_transition_time": "2025-10-17T12:00:05Z"
-        },
-        {
-          "type": "Health",
-          "status": "True",
-          "reason": "NoErrors",
-          "message": "Adapter is healthy",
-          "last_transition_time": "2025-10-17T12:00:05Z"
-        }
-      ],
-      "metadata": {
-        "job_name": "validation-cls-123-gen1",
-        "job_namespace": "hyperfleet-jobs"
-      },
-      "last_updated_time": "2025-10-17T12:00:05Z"
+      "type": "Available",
+      "status": "False",
+      "reason": "JobRunning",
+      "message": "Validation Job is executing",
+      "last_transition_time": "2025-10-17T12:00:05Z"
+    },
+    {
+      "type": "Applied",
+      "status": "True",
+      "reason": "JobLaunched",
+      "message": "Kubernetes Job 'validation-cls-123-gen1' created successfully",
+      "last_transition_time": "2025-10-17T12:00:05Z"
+    },
+    {
+      "type": "Health",
+      "status": "True",
+      "reason": "NoErrors",
+      "message": "Adapter is healthy",
+      "last_transition_time": "2025-10-17T12:00:05Z"
     }
-  ]
+  ],
+  "metadata": {
+    "job_name": "validation-cls-123-gen1",
+    "job_namespace": "hyperfleet-jobs"
+  },
+  "last_updated_time": "2025-10-17T12:00:05Z"
 }
 ```
 
@@ -1753,9 +1748,9 @@ The following examples show **individual adapter status payloads** that adapters
 
 ### 2. Adapter Succeeded
 
-**Scenario**: Validation Job completed successfully. Validation adapter POSTs to update its status (API handles upsert).
+**Scenario**: Validation Job completed successfully. Validation adapter PUTs to update its status (API handles upsert).
 
-**POST** `/v1/clusters/cls-123/statuses`
+**PUT** `/v1/clusters/cls-123/statuses`
 
 ```json
 {
@@ -1817,7 +1812,7 @@ The following examples show **individual adapter status payloads** that adapters
 
 **Scenario**: Validation Job ran but found missing Route53 zone
 
-**POST** `/v1/clusters/cls-123/statuses`
+**PUT** `/v1/clusters/cls-123/statuses`
 
 ```json
 {
@@ -1874,7 +1869,7 @@ The following examples show **individual adapter status payloads** that adapters
 
 **Scenario**: Adapter couldn't create Job due to quota exceeded.
 
-**POST** `/v1/clusters/cls-123/statuses`
+**PUT** `/v1/clusters/cls-123/statuses`
 
 ```json
 {
@@ -2818,7 +2813,7 @@ Automated API calls to report status using the contract defined in this document
 ```yaml
 actions:
   - type: "api_call"
-    method: "PATCH"
+    method: "PUT"
     endpoint: "{{.hyperfleetApi}}/api/{{.version}}/clusters/{{.clusterId}}/statuses"
     body: "{{.clusterStatusPayload}}"
 ```
@@ -2863,7 +2858,7 @@ The configuration-driven approach provides:
 The adapter configuration system implements the status contract defined in this document:
 
 - **Three Required Conditions** - `applied`, `available`, `health` are explicit sections in `statusEvaluation`
-- **Simple POST Pattern** - Framework automatically POSTs status reports (API handles upsert)
+- **Simple PUT Pattern** - Framework automatically PUTs status reports (API handles upsert)
 - **observed_generation** - Automatically included in status payloads from event parameters
 - **Condition Structure** - Templates generate proper `type`, `status`, `reason`, `message` fields
 - **Data Field** - Custom data can be included via configuration templates
@@ -2880,7 +2875,7 @@ For a complete example of an adapter configuration that implements this status c
 
 **ClusterStatus Object** (detailed, verbose):
 - ONE ClusterStatus per cluster containing all adapter statuses
-- Adapters always POST: `POST /v1/clusters/{clusterId}/statuses` with `adapter` field in payload
+- Adapters always PUT: `PUT /v1/clusters/{clusterId}/statuses` with `adapter` field in payload
 - API handles upsert internally: INSERT on first report, UPDATE on subsequent reports
 - Contains `adapter_statuses` array with full conditions, data, and metadata for each adapter
 - Retrieved via `GET /v1/clusters/{clusterId}/statuses` (optional - for querying)
