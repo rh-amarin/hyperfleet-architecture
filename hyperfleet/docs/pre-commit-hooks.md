@@ -1,7 +1,7 @@
 ---
 Status: Active
 Owner: HyperFleet Platform Team
-Last Updated: 2026-04-27
+Last Updated: 2026-05-14
 ---
 
 # Pre-Commit Hooks Setup Guide
@@ -24,7 +24,7 @@ Last Updated: 2026-04-27
 
 ## Overview
 
-HyperFleet uses a **centralized hook registry** at [`hyperfleet-hooks`](https://github.com/openshift-hyperfleet/hyperfleet-hooks) to enforce consistent commit message format and code quality across all repositories. The [pre-commit](https://pre-commit.com/) framework automatically downloads, builds, and caches hook binaries — no manual installation of individual tools is required.
+HyperFleet uses a **centralized hook registry** at [`hyperfleet-hooks`](https://github.com/openshift-hyperfleet/hyperfleet-hooks) to enforce consistent commit message format and code quality across all repositories. Additionally, **LeakTK** provides secret scanning to prevent credentials and API keys from being committed. The [pre-commit](https://pre-commit.com/) framework automatically downloads, builds, and caches hook binaries — no manual installation of individual tools is required.
 
 ### How It Works
 
@@ -53,12 +53,20 @@ When a developer runs `git commit`, the pre-commit framework intercepts the oper
   pip install pre-commit
   ```
 
-- Go 1.25+ (for the `commitlint` hook — built automatically by pre-commit on first run)
+- Go 1.25+ (for the `commitlint` hook and LeakTK secret scanning — both built automatically by pre-commit on first run)
+- `btrfs-progs-devel` (Fedora/RHEL) for LeakTK compilation:
+
+  ```bash
+  sudo dnf install btrfs-progs-devel
+  ```
+
 - `make` targets (`lint`, `gofmt`, `go-vet`) in the consuming repo (for Go tooling hooks)
 
 ---
 
 ## Available Hooks
+
+### HyperFleet Hooks
 
 All hooks are defined in the [`hyperfleet-hooks`](https://github.com/openshift-hyperfleet/hyperfleet-hooks) repository:
 
@@ -70,6 +78,22 @@ All hooks are defined in the [`hyperfleet-hooks`](https://github.com/openshift-h
 | `hyperfleet-go-vet` | `pre-commit` | `system` | Runs `make go-vet` — finds suspicious constructs in Go code |
 
 The Go tooling hooks use `language: system` and delegate to existing Make targets rather than reimplementing tool resolution. This leverages each repo's [bingo](https://github.com/bwplotka/bingo)-managed tool versions (see [dependency pinning standard](https://github.com/openshift-hyperfleet/architecture/blob/main/hyperfleet/standards/dependency-pinning.md)).
+
+### Secret Scanning Hook
+
+**LeakTK** provides secret scanning to prevent credentials, API keys, and other secrets from being committed:
+
+| Hook ID | Stage | Language | Description |
+|---------|-------|----------|-------------|
+| `leaktk.git.pre-commit` | `pre-commit` | `golang` | LeakTK: Scans staged files for secrets using Gitleaks engine with Red Hat-specific patterns |
+
+**Key features**:
+- ✅ **Open-source** — no VPN requirement, works for all contributors
+- ✅ **Developed by Red Hat InfoSec** — same team that created rh-pre-commit
+- ✅ **Gitleaks-powered** — uses proven secret detection patterns
+- ⏱️ **First-time compilation** — takes 3-5 minutes on first commit, then cached
+
+See the [Secret Scanning Migration](#secret-scanning-migration-rh-pre-commit-leaktk) section for migration details.
 
 ---
 
@@ -83,6 +107,13 @@ All HyperFleet repositories **SHOULD** use the same `.pre-commit-config.yaml`. T
 default_install_hook_types: [pre-commit, commit-msg]
 
 repos:
+  # Secret scanning
+  - repo: https://github.com/leaktk/leaktk
+    rev: v0.3.2  # Check https://github.com/leaktk/leaktk/releases for latest
+    hooks:
+      - id: leaktk.git.pre-commit
+
+  # HyperFleet code quality hooks
   - repo: https://github.com/openshift-hyperfleet/hyperfleet-hooks
     rev: v0.1.1  # pin to a specific tag
     hooks:
@@ -105,9 +136,19 @@ The file hygiene hooks (`trailing-whitespace`, `end-of-file-fixer`, `check-added
 
 > **Note:** `default_install_hook_types: [pre-commit, commit-msg]` means a single `pre-commit install` command installs hooks for **both** the `pre-commit` and `commit-msg` stages. Without this setting, you would need to run `pre-commit install --hook-type commit-msg` separately to enable commit message validation.
 
+> **Important:** On the **first commit** after running `make install-hooks`, LeakTK will compile from source (3-5 minutes). Subsequent commits use the cached binary and run instantly.
+
 ---
 
 ## Migration Guide
+
+This section covers two migration scenarios:
+1. **Adding Pre-commit Hooks** — adding hooks to an existing HyperFleet repository
+2. **Secret Scanning Migration** — migrating from rh-pre-commit to LeakTK
+
+---
+
+### Adding Pre-commit Hooks to a Repository
 
 Follow these steps to add pre-commit hooks to an existing HyperFleet repository.
 
@@ -204,6 +245,119 @@ git commit -m "HYPERFLEET-XXX - chore: add pre-commit hooks"
 
 ---
 
+### Secret Scanning Migration: rh-pre-commit → LeakTK
+
+#### Why Migrate to LeakTK?
+
+[**LeakTK**](https://github.com/leaktk/leaktk) is an open-source secret scanning toolkit developed by Red Hat's Information Security team — the same team that created rh-pre-commit.
+
+**Key benefits over rh-pre-commit**:
+- ✅ **No VPN requirement** — works for Red Hat associates and external contributors
+- ✅ **Open-source** — MIT licensed, publicly accessible on GitHub
+- ✅ **Can be committed to repos** — configuration lives in repository files
+- ✅ **Enforces on all developers** — configuration in repo ensures everyone uses it
+- ✅ **Same detection engine** — both use Gitleaks with Red Hat-specific patterns (verified by InfoSec team)
+
+#### Comparison: rh-pre-commit vs LeakTK
+
+Both tools perform secret scanning using Gitleaks as the underlying engine. Here are the key differences:
+
+| Feature | rh-pre-commit | LeakTK |
+|---------|--------------|---------|
+| **Secret scanning** | ✅ Gitleaks engine | ✅ Gitleaks engine |
+| **Red Hat patterns** | ✅ Customized patterns | ✅ Customized patterns |
+| **VPN required** | ⚠️ Only during installation | ❌ Never |
+| **Open-source** | ❌ Internal Red Hat tool | ✅ Public GitHub repository |
+| **Installation** | ✅ Pre-built binary | ⚠️ Compiles from source (first time only) |
+
+
+#### Migration Steps
+
+**Step 1: Ensure system requirements**
+
+Verify that all team members have Go 1.25+ and btrfs-progs-devel installed:
+
+```bash
+go version  # Should show 1.25.0 or later
+
+# Fedora/RHEL
+sudo dnf install btrfs-progs-devel
+
+# Ubuntu/Debian
+sudo apt install libbtrfs-dev
+```
+
+Or via Homebrew on macOS:
+
+```bash
+brew install btrfs-progs
+```
+
+**Step 2: Update `.pre-commit-config.yaml`**
+
+Replace the rh-pre-commit configuration with LeakTK:
+
+```yaml
+# Before (rh-pre-commit)
+repos:
+  - repo: https://gitlab.cee.redhat.com/infosec-public/developer-workbench/tools
+    rev: rh-pre-commit-2.3.2
+    hooks:
+      - id: rh-pre-commit
+
+# After (LeakTK)
+repos:
+  - repo: https://github.com/leaktk/leaktk
+    rev: v0.3.2  # Check https://github.com/leaktk/leaktk/releases for latest
+    hooks:
+      - id: leaktk.git.pre-commit
+```
+
+**Step 3: Notify team**
+
+Inform all developers that:
+1. System requirements must be met (Go 1.25+, btrfs-progs-devel)
+2. They should reinstall hooks: `make install-hooks`
+3. The **first commit** will take 3-5 minutes (one-time compilation)
+4. Subsequent commits will run instantly (cached binary)
+
+**Step 4: Commit the migration**
+
+```bash
+git add .pre-commit-config.yaml
+git commit -m "HYPERFLEET-XXX - chore: migrate from rh-pre-commit to LeakTK"
+```
+
+#### What Changes After Migration
+
+**During development**:
+```bash
+# First commit after migration (one-time)
+git commit -m "feat: add feature"
+# LeakTK compiles (3-5 minutes), then scans
+# ✅ Commit succeeds if no secrets found
+
+# All subsequent commits
+git commit -m "feat: another feature"
+# LeakTK uses cached binary (instant)
+```
+
+**Example output when a secret is detected**:
+```text
+leaktk.git.pre-commit
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 1 secret(s) detected in staged files                                        │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ config/database.yml:12                                                      │
+│ Password = "admin123"  # Generic Password                                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+The commit will be blocked until secrets are removed.
+
+---
+
+
 ## Troubleshooting
 
 ### `pre-commit: command not found`
@@ -228,6 +382,32 @@ Your Makefile needs the `gofmt` alias. Add it pointing to your existing formatti
 .PHONY: gofmt
 gofmt: fmt ## Alias for fmt
 ```
+
+### LeakTK compilation fails with "Go version too old"
+
+LeakTK requires Go 1.25+:
+
+```bash
+# Check version
+go version
+
+# Update (Fedora/RHEL)
+sudo dnf update golang
+
+# Or download from https://go.dev/dl/
+```
+
+### LeakTK compilation fails with "btrfs/ioctl.h: No such file or directory"
+
+Install the btrfs development headers:
+
+```bash
+sudo dnf install btrfs-progs-devel
+```
+
+### First commit takes 3-5 minutes
+
+This is **expected behavior** on the first commit after installing LeakTK. The pre-commit framework is compiling LeakTK from source. Subsequent commits will use the cached binary and run instantly.
 
 ### Hook runs but uses wrong tool version
 
@@ -274,3 +454,6 @@ This updates the `rev` field in `.pre-commit-config.yaml` to the latest tag.
 - [pre-commit documentation](https://pre-commit.com/)
 - [hyperfleet-hooks repository](https://github.com/openshift-hyperfleet/hyperfleet-hooks)
 - [Sentinel pilot PR (hyperfleet-sentinel#102)](https://github.com/openshift-hyperfleet/hyperfleet-sentinel/pull/102) — reference implementation
+- [LeakTK GitHub Repository](https://github.com/leaktk/leaktk)
+- [Git Hooks Installation Guide](https://github.com/leaktk/leaktk/blob/main/docs/install_git_hooks.md)
+- [PR #248 - pre-commit.com integration](https://github.com/leaktk/leaktk/pull/248) ✅ Merged 2026-05-13
