@@ -1,7 +1,7 @@
 ---
 Status: Draft
 Owner: HyperFleet Architecture Team
-Last Updated: 2026-04-09
+Last Updated: 2026-05-18
 ---
 
 # Generic Resource Registry — Design Document
@@ -37,15 +37,21 @@ This document contains the proposal for the Generic Resource Registry and altern
 8. [Delete Model for Owned Resources](#8-delete-model-for-owned-resources)
    - [8.1 Descriptor-driven delete policy](#81-descriptor-driven-delete-policy)
    - [8.2 Service layer implementation](#82-service-layer-implementation)
-9. [No Migration, No Backward Compatibility](#9-no-migration-no-backward-compatibility)
-10. [Alternatives and Tradeoffs](#10-alternatives-and-tradeoffs)
-    - [10.1 Separate tables vs. JSONB for labels and conditions](#101-separate-tables-vs-jsonb-for-labels-and-conditions)
-    - [10.2 Delete model for owned resources](#102-delete-model-for-owned-resources)
-    - [10.3 Entity configuration: where entity types are defined](#103-entity-configuration-where-entity-types-are-defined)
-    - [10.4 Naming the generic entity type](#104-naming-the-generic-entity-type)
-    - [10.5 Computed vs. stored conditions](#105-computed-vs-stored-conditions)
-    - [10.6 Child entity creation via the generic root endpoint](#106-child-entity-creation-via-the-generic-root-endpoint)
-11. [Risks](#11-risks)
+9. [Resource References](#9-resource-references)
+   - [9.1 Overview](#91-overview)
+   - [9.2 API representation](#92-api-representation)
+   - [9.3 Deletion restriction](#93-deletion-restriction)
+   - [9.4 Reverse lookup](#94-reverse-lookup)
+10. [No Migration, No Backward Compatibility](#10-no-migration-no-backward-compatibility)
+11. [Alternatives and Tradeoffs](#11-alternatives-and-tradeoffs)
+    - [11.1 Separate tables vs. JSONB for labels and conditions](#111-separate-tables-vs-jsonb-for-labels-and-conditions)
+    - [11.2 Delete model for owned resources](#112-delete-model-for-owned-resources)
+    - [11.3 Entity configuration: where entity types are defined](#113-entity-configuration-where-entity-types-are-defined)
+    - [11.4 Naming the generic entity type](#114-naming-the-generic-entity-type)
+    - [11.5 Computed vs. stored conditions](#115-computed-vs-stored-conditions)
+    - [11.6 Child entity creation via the generic root endpoint](#116-child-entity-creation-via-the-generic-root-endpoint)
+    - [11.7 Resource references design](#117-resource-references-design)
+12. [Risks](#12-risks)
 
 - [Appendix A. Current State](#appendix-a-current-state)
 
@@ -68,7 +74,7 @@ This is not desirable since it slows down HyperFleet customers willing to add ne
 
 ## 2. Design Overview
 
-The design rests on three ideas:
+The design rests on four ideas:
 
 1. **Generic OpenAPI contract**: the API exposes a single `Resource` response type.
     - The `spec` field is an untyped JSON object at the API layer;
@@ -77,13 +83,16 @@ The design rests on three ideas:
     - One `resources` table.
 3. **Entity registry**: each entity type is described by an `EntityDescriptor` registered at startup.
     - The registry drives route generation, spec validation, status aggregation, and delete behavior.
-    - Entities are defined in the configuration file
+    - Entities are defined in the configuration file.
+4. **Declarative resource references**: non-ownership associations between entity types are declared in the descriptor and stored in a `resource_references` join table.
+    - Referenced resources cannot be deleted while in use.
+    - Reverse lookup is available via query parameters on the referencing entity's list endpoint.
 
 ---
 
 ## 3. OpenAPI Contract
 
-The main API contract moves from per-entity types (`Cluster`, `NodePool`) to a single generic `Resource` type. Entity-specific spec structure is validated separately (see §7).
+The main API contract moves from per-entity types (`Cluster`, `NodePool`) to a single generic `Resource` type. Entity-specific spec structure is validated separately (see [§7](#7-handler-layer)).
 
 The development approach is contract-first with the OpenAPI spec generated in the hyperfleet-api-spec repository and copied over to the hyperfleet-api repository.
 
@@ -107,6 +116,11 @@ Resource:
     status:           { $ref: '#/components/schemas/ResourceStatus' }
     generation:       { type: integer, format: int32 }
     owner_references: { $ref: '#/components/schemas/ObjectReference' }  # optional
+    references:                                                          # optional — see §9
+      type: object
+      additionalProperties:
+        type: array
+        items: { $ref: '#/components/schemas/ObjectReference' }
     created_time:     { type: string, format: date-time }
     updated_time:     { type: string, format: date-time }
     created_by:       { type: string, format: email }
@@ -115,15 +129,25 @@ Resource:
 ResourceCreateRequest:
   required: [kind, name, spec]
   properties:
-    kind:   { type: string }
-    name:   { type: string }
-    spec:   { type: object, additionalProperties: true }
-    labels: { type: object, additionalProperties: { type: string } }
+    kind:       { type: string }
+    name:       { type: string }
+    spec:       { type: object, additionalProperties: true }
+    labels:     { type: object, additionalProperties: { type: string } }
+    references:                                                          # optional — see §9
+      type: object
+      additionalProperties:
+        type: array
+        items: { $ref: '#/components/schemas/ObjectReference' }
 
 ResourcePatchRequest:
   properties:
-    spec:   { type: object, additionalProperties: true }
-    labels: { type: object, additionalProperties: { type: string } }
+    spec:       { type: object, additionalProperties: true }
+    labels:     { type: object, additionalProperties: { type: string } }
+    references:                                                          # optional — null/absent = no-op; {} = clear all; map = replace; see §9
+      type: object
+      additionalProperties:
+        type: array
+        items: { $ref: '#/components/schemas/ObjectReference' }
 
 ResourceList:
   required: [items, total, size, page]
@@ -151,7 +175,8 @@ The API contract defines the routes for the `Resource` entity and methods:
 GET                /api/hyperfleet/v1/resources
 POST               /api/hyperfleet/v1/resources      # resources without parent
 GET PATCH,DELETE   /api/hyperfleet/v1/resources/{id}
-GET POST           /api/hyperfleet/v1/resources/{id}/statuses
+POST               /api/hyperfleet/v1/resources/{id}/force-delete
+GET PUT            /api/hyperfleet/v1/resources/{id}/statuses
 
 ```
 
@@ -161,11 +186,13 @@ Additionally, for each registered entity type, the following routes are generate
 # Top-level (all entity types)
 GET POST           /api/hyperfleet/v1/{plural}
 GET PATCH,DELETE   /api/hyperfleet/v1/{plural}/{id}
-GET POST           /api/hyperfleet/v1/{plural}/{id}/statuses
+GET POST           /api/hyperfleet/v1/{plural}/{id}/force-delete
+GET PUT            /api/hyperfleet/v1/{plural}/{id}/statuses
 
 # Nested (child entity types only — when ParentType != "")
 GET POST           /api/hyperfleet/v1/[{parent-plural}/{parent_id}...]/{plural}
 GET PATCH DELETE   /api/hyperfleet/v1/[{parent-plural}/{parent_id}...]/{plural}/{id}
+GET POST           /api/hyperfleet/v1/[{parent-plural}/{parent_id}...]/{plural}/{id}/force-delete
 GET POST           /api/hyperfleet/v1/[{parent-plural}/{parent_id}...]/{plural}/{id}/statuses
 ```
 
@@ -176,15 +203,18 @@ Example with Cluster (top-level) and NodePool (parent: Cluster):
 ```
 GET POST         /api/hyperfleet/v1/clusters
 GET PATCH DELETE /api/hyperfleet/v1/clusters/{id}
-GET POST         /api/hyperfleet/v1/clusters/{id}/statuses
+POST             /api/hyperfleet/v1/clusters/{id}/force-delete
+GET PUT          /api/hyperfleet/v1/clusters/{id}/statuses
 
-GET POST         /api/hyperfleet/v1/node-pools
-GET PATCH DELETE /api/hyperfleet/v1/node-pools/{id}
-GET POST         /api/hyperfleet/v1/node-pools/{id}/statuses
+GET POST         /api/hyperfleet/v1/nodepools
+GET PATCH DELETE /api/hyperfleet/v1/nodepools/{id}
+POST             /api/hyperfleet/v1/nodepools/{id}/force-delete
+GET PUT          /api/hyperfleet/v1/nodepools/{id}/statuses
 
-GET POST         /api/hyperfleet/v1/clusters/{parent_id}/node-pools
-GET PATCH DELETE /api/hyperfleet/v1/clusters/{parent_id}/node-pools/{id}
-GET POST         /api/hyperfleet/v1/clusters/{parent_id}/node-pools/{id}/statuses
+GET POST         /api/hyperfleet/v1/clusters/{parent_id}/nodepools
+GET PATCH DELETE /api/hyperfleet/v1/clusters/{parent_id}/nodepools/{id}
+POST             /api/hyperfleet/v1/clusters/{parent_id}/nodepools/{id}/force-delete
+GET PUT          /api/hyperfleet/v1/clusters/{parent_id}/nodepools/{id}/statuses
 ```
 
 ---
@@ -212,7 +242,7 @@ type Resource struct {
 
     // Parent reference — empty string for top-level entities
     OwnerID    string         `gorm:"column:owner_id;size:255"`
-    OwnerType  string         `gorm:"column:owner_type;size:100"`
+    OwnerKind  string         `gorm:"column:owner_kind;size:100"`
     OwnerHref  string         `gorm:"column:owner_href;size:500"`
 
     Spec       datatypes.JSON `gorm:"column:spec;not null"`
@@ -258,7 +288,22 @@ type ResourceCondition struct {
 }
 ```
 
-GORM lifecycle hooks (`BeforeCreate`, `BeforeUpdate`) on `Resource` handle ID generation, timestamp management, and generation initialization — identical to the current per-entity hook logic. Neither `ResourceLabel` nor `ResourceCondition` has a surrogate ID — both use natural composite PKs (`(resource_id, key)` and `(resource_id, type)` respectively) set by the DAO on insert.
+**`ResourceReference`** — one row per (source, refType, target) triple:
+
+```go
+// ResourceReference stores a single non-ownership association between two resources.
+// Table: resource_references. Natural composite PK (source_id, ref_type, target_id).
+type ResourceReference struct {
+    SourceID   string `gorm:"primaryKey;column:source_id;size:255"`
+    RefType    string `gorm:"primaryKey;column:ref_type;size:255"`
+    TargetID   string `gorm:"primaryKey;column:target_id;size:255"`
+    TargetKind string `gorm:"column:target_kind;size:100;not null"`
+}
+```
+
+`TargetKind` is stored alongside `TargetID` so `PresentResource` can construct the `ObjectReference` without a secondary lookup.
+
+GORM lifecycle hooks (`BeforeCreate`, `BeforeUpdate`) on `Resource` handle ID generation, timestamp management, and generation initialization — identical to the current per-entity hook logic. Neither `ResourceLabel`, `ResourceCondition`, nor `ResourceReference` has a surrogate ID — all use natural composite PKs set by the DAO on insert.
 
 ### 4.2 Database schema
 
@@ -272,12 +317,10 @@ GORM lifecycle hooks (`BeforeCreate`, `BeforeUpdate`) on `Resource` handle ID ge
 | `name` | `VARCHAR(100)` NOT NULL | |
 | `href` | `VARCHAR(500)` | Computed |
 | `created_by` / `updated_by` | `VARCHAR(255)` | |
-| `owner_id` | `VARCHAR(255)` | Empty string for top-level |
-| `owner_type` / `owner_href` | `VARCHAR(100/500)` | |
+| `owner_id` / `owner_kind` / `owner_href` | `VARCHAR(255/100/500)` | Empty string for top-level |
 | `spec` | `JSONB` NOT NULL | |
 | `generation` | `INT4` DEFAULT 1 | |
-| `created_time` / `updated_time` | `TIMESTAMPTZ` | |
-| `deleted_at` | `TIMESTAMPTZ` | Soft delete |
+| `created_time` / `updated_time` / `deleted_at` | `TIMESTAMPTZ` | |
 
 `labels` and `status_conditions` are **not columns** on this table.
 
@@ -307,9 +350,7 @@ Primary key: `(resource_id, key)` — enforces label key uniqueness per resource
 | `reason` | `VARCHAR(255)` | |
 | `message` | `TEXT` | |
 | `observed_generation` | `INT4` NOT NULL | |
-| `created_time` | `TIMESTAMPTZ` NOT NULL | |
-| `last_updated_time` | `TIMESTAMPTZ` NOT NULL | |
-| `last_transition_time` | `TIMESTAMPTZ` NOT NULL | |
+| `created_time` / `last_updated_time` / `last_transition_time`  | `TIMESTAMPTZ` NOT NULL | |
 
 Primary key: `(resource_id, type)` — enforces one condition per type per resource. No surrogate ID.
 
@@ -346,7 +387,27 @@ CREATE INDEX idx_resources_deleted_at ON resources (deleted_at);
 -- resource_conditions: no extra index needed — the composite PK (resource_id, type) is the leading
 -- index and covers all "WHERE resource_id = ?" queries efficiently. Uniqueness per (resource_id, type)
 -- is enforced by the PK itself.
+
+-- resource_references: target lookup for deletion restriction and reverse lookup queries
+CREATE INDEX idx_resource_references_source ON resource_references (source_id);
+CREATE INDEX idx_resource_references_target ON resource_references (target_id);
 ```
+
+</details>
+
+<details>
+<summary>Table: resource_references</summary>
+
+| Column | Type | Notes |
+|---|---|---|
+| `source_id` | `VARCHAR(255)` NOT NULL FK → `resources(id)` | Part of composite PK |
+| `ref_type` | `VARCHAR(255)` NOT NULL | Part of composite PK — e.g., `"wif_config"`, `"network"` |
+| `target_id` | `VARCHAR(255)` NOT NULL FK → `resources(id)` | Part of composite PK |
+| `target_kind` | `VARCHAR(100)` NOT NULL | Kind of the target resource — e.g., `"WifConfig"` |
+
+Primary key: `(source_id, ref_type, target_id)` — allows multiple targets per refType, enforces no duplicates. No surrogate ID.
+
+`idx_resource_references_source` covers reference preloading on `Get`. `idx_resource_references_target` covers `FindReferencers` (deletion restriction) and `FindByTypeAndTarget` (reverse lookup).
 
 </details>
 
@@ -361,14 +422,14 @@ Single DAO interface replacing `ClusterDao` and `NodePoolDao`. All queries inclu
 
 ```go
 type ResourceDao interface {
-    // Get fetches a resource with its Labels and Conditions preloaded.
+    // Get fetches a resource with its Labels, Conditions, and References preloaded.
     Get(ctx context.Context, resourceType, id string) (*api.Resource, error)
 
     // GetByOwner fetches a resource and validates it belongs to the given owner.
-    // Labels and Conditions are preloaded.
+    // Labels, Conditions, and References are preloaded.
     GetByOwner(ctx context.Context, resourceType, id, ownerID string) (*api.Resource, error)
 
-    // Create inserts the resource row, then inserts all Labels.
+    // Create inserts the resource row, then inserts all Labels and References.
     // Conditions are empty on create; they are set later by UpdateConditions.
     Create(ctx context.Context, resource *api.Resource) (*api.Resource, error)
 
@@ -379,6 +440,19 @@ type ResourceDao interface {
 
     // UpdateConditions replaces all ResourceCondition rows for the given resource.
     UpdateConditions(ctx context.Context, resourceID string, conditions []api.ResourceCondition) error
+
+    // ReplaceReferences replaces all resource_references rows for sourceID atomically
+    // (delete + bulk insert). Called by Create and Replace when references are present.
+    ReplaceReferences(ctx context.Context, sourceID string, refs []api.ResourceReference) error
+
+    // FindReferencers returns resources that hold a reference to targetID.
+    // Returns only enough rows to construct a descriptive error message (kind + name of the first referencer).
+    // Used by the deletion restriction check in Delete.
+    FindReferencers(ctx context.Context, targetID string) ([]api.ResourceSummary, error)
+
+    // FindByTypeAndTarget returns all resources of resourceType whose references map
+    // contains targetID under refType. Used for reverse lookup list queries.
+    FindByTypeAndTarget(ctx context.Context, resourceType, refType, targetID string) (api.ResourceList, error)
 
     Delete(ctx context.Context, resourceType, id string) error
     CountByOwner(ctx context.Context, resourceType, ownerID string) (int64, error)
@@ -392,8 +466,8 @@ type ResourceDao interface {
 
 **Key implementation notes:**
 
-- `Create` — inserts the resource row first (omitting associations), then bulk-inserts labels. Conditions are not inserted by the DAO; `ResourceService.Create` calls `UpdateStatusFromAdapters` immediately after to initialize them.
-- `Replace` — fetches the existing row with its labels preloaded, increments `Generation` if either `Spec` or `Labels` changed, updates the resource row, then replaces labels with a delete + bulk-insert. Conditions are intentionally excluded; they are written only by `UpdateConditions`.
+- `Create` — inserts the resource row first (omitting associations), then bulk-inserts labels and references. Conditions are not inserted by the DAO; `ResourceService.Create` calls `UpdateStatusFromAdapters` immediately after to initialize them.
+- `Replace` — fetches the existing row with its labels preloaded, increments `Generation` if either `Spec` or `Labels` changed, updates the resource row, then replaces labels with a delete + bulk-insert. When `references` is present in the PATCH body, calls `ReplaceReferences` for that resource. Conditions are intentionally excluded; they are written only by `UpdateConditions`.
 
 
 `UpdateConditions` — called exclusively by the status aggregation path. Replaces all condition rows for the resource atomically.
@@ -414,6 +488,26 @@ Entity descriptors are loaded from the application's existing config YAML at sta
 <summary>EntityDescriptor struct</summary>
 
 ```go
+// ReferenceDescriptor declares a non-ownership association from this entity type to another.
+// Min/Max constrain how many referenced resources of this type the entity may hold.
+type ReferenceDescriptor struct {
+    // RefType is the key used in the references map on the Resource API type.
+    // Must be unique within an entity's References slice. e.g., "wif_config", "network".
+    RefType string
+
+    // TargetKind is the Kind of the referenced entity. Must resolve to a registered
+    // EntityDescriptor at startup. e.g., "WifConfig", "Network".
+    TargetKind string
+
+    // Min is the minimum number of references of this type the entity must hold.
+    // 0 = optional. Enforced on Create and Patch.
+    Min int
+
+    // Max is the maximum number of references of this type the entity may hold.
+    // 0 = unlimited. Must satisfy: Max == 0 OR Max >= Min.
+    Max int
+}
+
 // OnParentDeletePolicy determines what happens to a child entity when its parent is deleted.
 type OnParentDeletePolicy string
 
@@ -433,7 +527,7 @@ type EntityDescriptor struct {
     Type string
 
     // Plural is the URL path segment for this entity's endpoints.
-    // e.g., "clusters", "node-pools".
+    // e.g., "clusters", "nodepools".
     Plural string
 
     // NameMinLen and NameMaxLen constrain the name field on Create and Patch.
@@ -465,6 +559,12 @@ type EntityDescriptor struct {
     // Empty string = no spec validation (accept any JSON object).
     // e.g., "ClusterSpec", "NodePoolSpec".
     SpecSchemaName string
+
+    // References declares the non-ownership associations this entity type may hold.
+    // Each entry is validated at startup: TargetKind must resolve to a registered
+    // descriptor, RefType must be unique within the slice, and Max == 0 OR Max >= Min.
+    // See [§9](#9-resource-references) for the full reference model.
+    References []ReferenceDescriptor
 }
 ```
 
@@ -483,12 +583,14 @@ func ChildrenOf(parentType string) []*EntityDescriptor   // descriptors with Par
 // Called during Env.Initialize() before route registration.
 func LoadFromConfig(cfg config.ApplicationConfig)
 
-// Validate checks all ParentType references resolve. Called at startup before
+// Validate checks all ParentType references resolve, all ReferenceDescriptor TargetKinds
+// resolve, RefType uniqueness within each entity, Max == 0 OR Max >= Min for each reference,
+// and SpecSchemaName existence in the provider OpenAPI spec. Called at startup before
 // the server accepts requests. Panics with a descriptive message on failure.
 func Validate()
 ```
 
-Descriptors are loaded from the application config file. The `Validate()` call in `Env.Initialize()` catches missing parent registrations or invalid/duplicated entries immediately at startup.
+Descriptors are loaded from the application config file. The `Validate()` call in `Env.Initialize()` catches missing parent registrations, invalid reference descriptors, and schema mismatches immediately at startup.
 
 ### 5.3 Entity configuration examples
 
@@ -504,9 +606,18 @@ entities:
     specSchemaName: ClusterSpec
     requiredAdapters: [provisioner, lifecycle]
     searchDisallowedFields: [spec]
+    references:
+      - refType: wif_config
+        targetKind: WifConfig
+        min: 1      # one is required
+        max: 1      # at most one WifConfig per Cluster; max: 0 means unlimited
+      - refType: network
+        targetKind: Network
+        min: 0
+        max: 0      # unlimited Networks per Cluster
 
   - type: NodePool
-    plural: node-pools
+    plural: nodepools
     nameMinLen: 3
     nameMaxLen: 15
     parentType: Cluster
@@ -514,6 +625,14 @@ entities:
     specSchemaName: NodePoolSpec
     requiredAdapters: [provisioner, lifecycle]
     searchDisallowedFields: [spec]
+
+  - type: WifConfig
+    plural: wifconfigs
+    nameMinLen: 3
+    nameMaxLen: 63
+    specSchemaName: WifConfigSpec
+    requiredAdapters: []
+    # No references declared — WifConfig is only ever the target of references.
 ```
 
 That is all per-entity configuration required. No DAO, no service, no handler, no presenter, no Go code.
@@ -535,7 +654,7 @@ Each resource carries a relative `href` field that uniquely identifies it within
 Examples for a NodePool (parent: Cluster):
 
 ```
-/api/hyperfleet/v1/clusters/c-abc123/node-pools/np-xyz789
+/api/hyperfleet/v1/clusters/c-abc123/nodepools/np-xyz789
 ```
 
 The href is relative (no scheme or host). Clients that need an absolute URL prepend the base URL from their configuration. This avoids storing environment-specific hostnames in the database and prevents href staleness across environment promotions.
@@ -546,13 +665,13 @@ Because the child href embeds the parent ID, it can only be constructed correctl
 
 ```
 # Parent ID is in the URL — href can be constructed
-POST /api/hyperfleet/v1/clusters/{parent_id}/node-pools   ✓
+POST /api/hyperfleet/v1/clusters/{parent_id}/nodepools   ✓
 
 # No parent ID in the URL — href cannot be constructed
 POST /api/hyperfleet/v1/resources                          ✗ (for child entity types)
 ```
 
-**Design decision:** `POST /api/hyperfleet/v1/resources` is restricted to top-level entity types only (descriptors with `ParentType == ""`). Attempting to create a child entity type via the generic root endpoint returns `422 Unprocessable Entity` with a message directing the caller to the nested route. See §10.6 for the alternative considered.
+**Design decision:** `POST /api/hyperfleet/v1/resources` is restricted to top-level entity types only (descriptors with `ParentType == ""`). Attempting to create a child entity type via the generic root endpoint returns `422 Unprocessable Entity` with a message directing the caller to the nested route. See [§11.6](#116-child-entity-creation-via-the-generic-root-endpoint) for the alternative considered.
 
 ---
 
@@ -598,7 +717,7 @@ Replaces all per-entity `ConvertCluster`, `PresentCluster`, `ConvertNodePool`, `
 ```go
 func ConvertResource(
     req *openapi.ResourceCreateRequest,
-    entityKind, ownerID, ownerType, ownerHref, createdBy string,
+    entityKind, ownerID, ownerKind, ownerHref, createdBy string,
 ) *api.Resource {
     specJSON, _ := json.Marshal(req.Spec)
 
@@ -608,16 +727,29 @@ func ConvertResource(
         labels = append(labels, api.ResourceLabel{Key: k, Value: v})
     }
 
+    // Build []ResourceReference from the request references map.
+    var refs []api.ResourceReference
+    for refType, targets := range req.References {
+        for _, t := range targets {
+            refs = append(refs, api.ResourceReference{
+                RefType:    refType,
+                TargetID:   t.Id,
+                TargetKind: t.Kind,
+            })
+        }
+    }
+
     return &api.Resource{
-        Kind:      entityKind,
-        Name:      req.Name,
-        Spec:      specJSON,
-        Labels:    labels,
-        OwnerID:   ownerID,
-        OwnerType: ownerType,
-        OwnerHref: ownerHref,
-        CreatedBy: createdBy,
-        UpdatedBy: createdBy,
+        Kind:       entityKind,
+        Name:       req.Name,
+        Spec:       specJSON,
+        Labels:     labels,
+        References: refs,
+        OwnerID:    ownerID,
+        OwnerKind:  ownerKind,
+        OwnerHref:  ownerHref,
+        CreatedBy:  createdBy,
+        UpdatedBy:  createdBy,
     }
 }
 
@@ -631,10 +763,22 @@ func PresentResource(r *api.Resource) openapi.Resource {
         labels[l.Key] = l.Value
     }
 
+    // References are typed structs from the resource_references table.
+    // Group by RefType; TargetKind is stored alongside TargetID to avoid secondary lookups.
+    references := make(map[string][]openapi.ObjectReference)
+    for _, ref := range r.References {
+        references[ref.RefType] = append(references[ref.RefType], openapi.ObjectReference{
+            Id:   ref.TargetID,
+            Kind: ref.TargetKind,
+            Href: hrefForReference(ref),
+        })
+    }
+
     // Conditions are typed structs from the resource_conditions table — no JSON unmarshal needed.
     result := openapi.Resource{
         Id: r.ID, Kind: r.Kind, Name: r.Name, Href: r.Href,
         Spec: spec, Labels: labels, Generation: r.Generation,
+        References:  references,
         CreatedTime: r.CreatedTime, UpdatedTime: r.UpdatedTime,
         CreatedBy: openapi_types.Email(r.CreatedBy),
         UpdatedBy: openapi_types.Email(r.UpdatedBy),
@@ -642,7 +786,7 @@ func PresentResource(r *api.Resource) openapi.Resource {
     }
     if r.OwnerID != "" {
         result.OwnerReferences = &openapi.ObjectReference{
-            Id: r.OwnerID, Kind: r.OwnerType, Href: r.OwnerHref,
+            Id: r.OwnerID, Kind: r.OwnerKind, Href: r.OwnerHref,
         }
     }
     return result
@@ -666,6 +810,7 @@ type ResourceHandler struct {
 }
 
 // Top-level routes
+// List supports optional reference filter query params: ref_type + ref_target_id (see §9.4).
 func (h *ResourceHandler) List(w http.ResponseWriter, r *http.Request)
 func (h *ResourceHandler) Create(w http.ResponseWriter, r *http.Request)
 func (h *ResourceHandler) Get(w http.ResponseWriter, r *http.Request)
@@ -728,7 +873,7 @@ func (h *ResourceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 ### 7.3 `ResourceStatusHandler` (`pkg/handlers/resource_status.go`)
 
-Handles `GET` and `POST` on `/{id}/statuses` for all entity types. The `{id}` path variable is the same whether accessed via a top-level or nested route.
+Handles `GET` and `PUT` on `/{id}/statuses` for all entity types. The `{id}` path variable is the same whether accessed via a top-level or nested route.
 
 <details>
 <summary>ResourceStatus handler</summary>
@@ -797,7 +942,7 @@ func RegisterEntityRoutes(
 
 ### 8.1 Descriptor-driven delete policy
 
-Delete behavior for child entities is declared on the **child's** `EntityDescriptor` via `OnParentDelete`. This mirrors database foreign key semantics (`ON DELETE CASCADE` / `ON DELETE RESTRICT`) and keeps the policy co-located with the entity it governs. See §10.2 for alternatives considered.
+Delete behavior for child entities is declared on the **child's** `EntityDescriptor` via `OnParentDelete`. This mirrors database foreign key semantics (`ON DELETE CASCADE` / `ON DELETE RESTRICT`) and keeps the policy co-located with the entity it governs. See [§11.2](#112-delete-model-for-owned-resources) for alternatives considered.
 
 ```go
 type OnParentDeletePolicy string
@@ -860,7 +1005,135 @@ All deletions happen within the existing transaction-per-request middleware. The
 
 ---
 
-## 9. No Migration, No Backward Compatibility
+## 9. Resource References
+
+### 9.1 Overview
+
+Resource references model non-ownership associations between entities. Unlike the owner/child relationship ([§8](#8-delete-model-for-owned-resources)), a referenced resource does not own the referencing resource, and the same resource can be referenced by many others.
+
+**Example:** `WifConfig` can be associated with a `Cluster`. A single `WifConfig` can be used by many Clusters. The association is optional and does not make `WifConfig` the owner of `Cluster`.
+
+**Properties:**
+
+- Declared statically per entity type in config — no Go code required (see [§5.1](#51-entitydescriptor-pkgregistrydescriptorgo) for `ReferenceDescriptor`, [§5.3](#53-entity-configuration-examples) for config examples).
+- Stored in a dedicated `resource_references` join table (see [§4.1](#41-gorm-types-pkgapiresourcego)–[§4.3](#43-resourcedao-pkgdaoresourcego)).
+- Exposed as a typed map on the `Resource` API type with values always as arrays of `ObjectReference` (see [§3.1](#31-core-types)).
+- Mutable: a PATCH replaces the full `references` map.
+- Required references enforced at Create and Patch time.
+- Deleting a referenced resource is **blocked** (`409 Conflict`) if any resource holds a reference to it.
+
+
+---
+
+### 9.2 API representation
+
+The `references` field is a map keyed by `refType`. Values are always arrays of `ObjectReference`, regardless of the declared `max`. Keys absent from the map mean the entity holds no entries for that `refType`.
+
+**Example — Cluster with a WifConfig and two Networks:**
+
+```json
+{
+  "id": "cl-abc123",
+  "kind": "Cluster",
+  "name": "prod",
+  "references": {
+    "wif_config": [{"id": "wc-xyz", "kind": "WifConfig", "href": "/api/hyperfleet/v1/wifconfigs/wc-xyz"}],
+    "network":    [
+      {"id": "net-1", "kind": "Network", "href": "/api/hyperfleet/v1/networks/net-1"},
+      {"id": "net-2", "kind": "Network", "href": "/api/hyperfleet/v1/networks/net-2"}
+    ]
+  }
+}
+```
+
+**PATCH semantics:** the `references` field follows a three-way distinction:
+
+| PATCH body value | Meaning | Effect |
+|---|---|---|
+| field absent / `null` | "I am not changing references" | References are left untouched |
+| `{}` (empty object) | "I want zero references" | All existing reference rows are deleted; `min > 0` constraints are enforced and return `422` if violated |
+| `{"wif_config": [...]}` | "Replace references with this map" | Existing rows are deleted and replaced atomically; `min`/`max` constraints are enforced across the resulting map |
+
+When `references` is present (including `{}`), the service validates the resulting state against every declared `ReferenceDescriptor` (`min`/`max`) before persisting. `null` and a missing field are treated identically — neither triggers `ReplaceReferences`.
+
+---
+
+### 9.3 Deletion restriction
+
+The reference restriction applies to **every** resource deletion, whether initiated directly or as part of an owned-children cascade ([§8](#8-delete-model-for-owned-resources)). Before deleting a resource, the service checks whether any other resource holds a reference to it:
+
+```go
+func (s *sqlResourceService) Delete(ctx context.Context, resourceType, id string) *errors.ServiceError {
+    // Reference restriction — checked before owned-children cascade/restrict.
+    // Applies on every recursive cascade call, not just the root delete.
+    referencers, _ := s.dao.FindReferencers(ctx, id)
+    if len(referencers) > 0 {
+        r := referencers[0]
+        return errors.Conflict("HYPERFLEET-REF-001",
+            "cannot delete %s %q: referenced by %s %q — remove the reference before deleting",
+            resourceType, id, r.Kind, r.Name)
+    }
+
+    // Owned-children policy (existing §8 logic follows).
+    for _, child := range registry.ChildrenOf(resourceType) {
+        // ...
+    }
+    return handleDeleteError(resourceType, s.dao.Delete(ctx, resourceType, id))
+}
+```
+
+`FindReferencers` replaces the coarse `CountByTarget` — it returns the first referencing resource (kind + name) so the error message names exactly what is blocking the deletion and what the caller must remove.
+
+**Interaction with cascade deletes**
+
+Because `Delete` is called recursively during cascade, the reference check applies at every level of the ownership tree. Consider:
+
+```
+Cluster "prod"
+  └── NodePool "workers"    (OnParentDelete: cascade)
+
+UpgradePolicy "nightly"     (references NodePool "workers" via ref_type: target_node_pool)
+```
+
+`DELETE /clusters/prod` proceeds as follows:
+
+1. Reference check on `prod` → nothing references the Cluster → proceed
+2. Cascade: `Delete(NodePool, "workers")` is called
+3. Reference check on `workers` → `UpgradePolicy "nightly"` references it → **409 Conflict**
+
+```
+409 Conflict: cannot delete NodePool "workers": referenced by UpgradePolicy "nightly"
+              — remove the reference before deleting
+```
+
+The error surfaces on a Cluster delete request but names the NodePool and the UpgradePolicy blocking it. This is intentional: the restriction is strict and conservative. The caller must remove `UpgradePolicy "nightly"` (or its reference to `workers`) before the Cluster can be deleted.
+
+This is a deliberate choice over cascade-deleting referencers or skipping the check during cascade — both of which risk silently destroying resources the caller did not intend to remove. See [§11.7](#117-resource-references-design) for alternatives considered.
+
+---
+
+### 9.4 Reverse lookup
+
+Callers can find all resources of a given type that reference a specific resource using two query parameters on the standard list endpoint:
+
+| Parameter | Description |
+|---|---|
+| `ref_type` | The `refType` key on the referencing entity (e.g., `wif_config`) |
+| `ref_target_id` | The ID of the referenced resource (e.g., `wc-xyz`) |
+
+**Example — all Clusters using WifConfig `wc-xyz`:**
+
+```
+GET /api/hyperfleet/v1/clusters?ref_type=wif_config&ref_target_id=wc-xyz
+```
+
+Both parameters must be provided together. Providing only one returns `400 Bad Request`. The handler validates that `ref_type` is a declared `refType` on the entity's descriptor before querying, returning `400` for unknown values.
+
+The query joins `resource_references` on `source_id = resources.id` filtered by `ref_type` and `target_id`, leveraging `idx_resource_references_target`. Pagination, ordering, and TSL search compose with these filters normally.
+
+---
+
+## 10. No Migration, No Backward Compatibility
 
 The database is initialized from scratch. There is no existing data to migrate and no requirement to maintain API compatibility with the current per-entity endpoints.
 
@@ -874,9 +1147,10 @@ The database is initialized from scratch. There is no existing data to migrate a
 **Database migrations:**
 
 ```
-202604080001_add_resources.go         — CREATE TABLE resources + indexes
-202604080002_add_resource_labels.go   — CREATE TABLE resource_labels
+202604080001_add_resources.go           — CREATE TABLE resources + indexes
+202604080002_add_resource_labels.go     — CREATE TABLE resource_labels
 202604080003_add_resource_conditions.go — CREATE TABLE resource_conditions
+202604080004_add_resource_references.go — CREATE TABLE resource_references + indexes
 ```
 
 The `clusters` and `node_pools` tables are not dropped — the database is initialized from scratch with no pre-existing tables.
@@ -885,11 +1159,11 @@ The `adapter_statuses` table is unchanged. Its `resource_type` column already st
 
 ---
 
-## 10. Alternatives and Tradeoffs
+## 11. Alternatives and Tradeoffs
 
 This section documents the most critical design decisions, the alternatives considered, and why each was accepted or rejected.
 
-### 10.1 Separate tables vs. JSONB for labels and conditions
+### 11.1 Separate tables vs. JSONB for labels and conditions
 
 **Chosen:** `resource_labels` and `resource_conditions` as dedicated tables with natural composite PKs.
 
@@ -906,9 +1180,9 @@ Store `labels JSONB` and `status_conditions JSONB` on the `resources` row.
 
 ---
 
-### 10.2 Delete model for owned resources
+### 11.2 Delete model for owned resources
 
-**Chosen:** Descriptor-driven `OnParentDelete` policy on the child entity. See §8 for the implementation.
+**Chosen:** Descriptor-driven `OnParentDelete` policy on the child entity. See [§8](#8-delete-model-for-owned-resources) for the implementation.
 
 <details>
 <summary><strong>Alternative A — Restrict only</strong></summary>
@@ -952,11 +1226,11 @@ DELETE /clusters/{id}?cascade=true → 202 Accepted
 
 **Why chosen (descriptor-driven `OnParentDelete`):** The policy belongs to the child entity, not to the caller or the API call. Different child types of the same parent can legitimately require different behaviors — cascade for NodePools, restrict for hypothetical audit-log children — which a single `?cascade=true` flag cannot express. Placing the policy on the child's descriptor makes behavior inspectable at startup, eliminates a query parameter from the API surface, and keeps the `Delete` handler trivially simple.
 
-We have to have in mind that there will be a hard deletion option with `?force=true` or similar that will cascade delete all entities from a root entity for administrative tasks.
+There is a hard deletion option via `POST /{id}/force-delete` that will cascade delete all entities from a root entity for administrative tasks, bypassing the reference restriction and `OnParentDelete` policies.
 
 ---
 
-### 10.3 Entity configuration: where entity types are defined
+### 11.3 Entity configuration: where entity types are defined
 
 **Chosen:** Entity descriptors declared in the application's existing config YAML file, with startup validation that cross-checks every descriptor against the provider's OpenAPI spec. The server reads them at startup to populate the registry. No Go code is required for standard entities.
 
@@ -1129,7 +1403,7 @@ func init() {
 
 ---
 
-### 10.4 Naming the generic entity type
+### 11.4 Naming the generic entity type
 
 The single Go/OpenAPI/DB type that unifies all entity kinds needs a name. This name appears in the API route (`/resources`), the OpenAPI schema (`Resource`), the Go struct (`Resource`), and the DB table (`resources`).
 
@@ -1186,7 +1460,7 @@ Used by Kubernetes for all API objects (`metav1.Object`, object store, etc.).
 
 ---
 
-### 10.5 Computed vs. stored conditions
+### 11.5 Computed vs. stored conditions
 
 **Chosen:** Conditions are computed by `AggregateResourceStatus` when adapter statuses change and persisted to the `resource_conditions` table. Reads serve stored rows directly.
 
@@ -1196,7 +1470,7 @@ The new design changed the Status Conditions from JSON to its own table. One add
 
 When a `GET` request arrives, fetch the resource row and its `adapter_statuses` rows, run `AggregateResourceStatus` in-process, and return the result without writing anything.
 
-- Pro : Write path simplifies: `POST /{id}/statuses` writes one `adapter_statuses` row and returns — no aggregation, no secondary write
+- Pro : Write path simplifies: `PUT /{id}/statuses` writes one `adapter_statuses` row and returns — no aggregation, no secondary write
 - Pro : Conditions are always current — no stale window between an adapter report and the next read
 - Pro : Removes `resource_conditions` table, `ResourceDao.UpdateConditions`, and the two-step `Create` workflow that initializes conditions immediately after insert
 - Pro : `ProcessAdapterStatus` becomes a pure single-row write with no side effects
@@ -1212,11 +1486,11 @@ If the API contract were ever relaxed to remove `LastTransitionTime` and `Create
 
 ---
 
-### 10.6 Child entity creation via the generic root endpoint
+### 11.6 Child entity creation via the generic root endpoint
 
 **Chosen:** `POST /api/hyperfleet/v1/resources` is restricted to top-level entity types. Child entities must be created through their generated nested route (`POST /{parent-plural}/{parent_id}/{plural}`), which provides the parent ID in the URL. Attempting to create a child type via the root endpoint returns `422 Unprocessable Entity`.
 
-**Why this constraint exists:** The child's `href` embeds the parent ID (e.g., `/api/hyperfleet/v1/clusters/c-abc/node-pools/np-xyz`). The parent ID is only available from the URL path on the nested route. Without it, the service cannot construct a correct, stable href at creation time.
+**Why this constraint exists:** The child's `href` embeds the parent ID (e.g., `/api/hyperfleet/v1/clusters/c-abc/nodepools/np-xyz`). The parent ID is only available from the URL path on the nested route. Without it, the service cannot construct a correct, stable href at creation time.
 
 **Alternative — Accept `owner_references` in `ResourceCreateRequest` for child entities**
 
@@ -1244,7 +1518,76 @@ The service would validate that `owner_references` is present and refers to a va
 
 ---
 
-## 11. Risks
+### 11.7 Resource references design
+
+**Chosen:** `resource_references` join table with `(source_id, ref_type, target_id)` composite PK; references exposed as a typed map on the `Resource` API type keyed by `refType`, values always arrays of `ObjectReference`; cardinality and optionality expressed via `min`/`max` on `ReferenceDescriptor`; deletion of a referenced resource is blocked with `409`; reverse lookup via query parameters `ref_type` + `ref_target_id` on the list endpoint of the referencing entity type.
+
+<details>
+<summary><strong>Alternative A — Store reference IDs inside <code>spec</code></strong></summary>
+
+Reference IDs are plain fields in the entity's `spec` JSON blob. No new table. The caller sets `spec.wif_config_id = "wc-xyz"` and the server validates it exists.
+
+- Pro : No schema changes — references are just another spec field
+- Pro : No new table or DAO methods
+- Con : References are invisible to the infrastructure — no deletion restriction is enforceable without scanning every entity's JSONB spec
+- Con : Reverse lookup ("all Clusters using WifConfig X") requires a GIN index on `spec` and a JSONB query — expensive and fragile
+- Con : Cardinality, required status, and target kind are opaque to the registry — cannot be validated at startup or enforced uniformly at the handler layer
+- Con : `href` for the referenced resource cannot be included in the response without a secondary DB read per reference
+
+</details>
+
+<details>
+<summary><strong>Alternative B — Separate column per reference type on the <code>resources</code> table</strong></summary>
+
+Add `wif_config_id VARCHAR(255)`, `network_ids TEXT[]`, etc. as columns on the `resources` table. Each new reference type requires a migration.
+
+- Pro : Standard FK semantics enforceable at the DB level for single-value references
+- Pro : Simple indexed lookups
+- Con : Every new reference type requires a schema migration and a new column — defeats the goal of adding entity types without code or migration changes
+- Con : Array columns (`TEXT[]`) for multi-valued references have limited indexing support and no FK enforcement
+- Con : Cannot be driven by config — the column must exist before the descriptor is registered
+
+</details>
+
+<details>
+<summary><strong>Alternative C — Cascade-delete referencing resources when referenced resource is deleted</strong></summary>
+
+Instead of blocking deletion of a referenced resource, cascade-delete all resources that reference it.
+
+- Pro : Single DELETE operation removes the entire graph without 409 friction for the caller
+- Con : Referencing resources (e.g., Clusters) are far more expensive and consequential than the referenced resource (e.g., WifConfig) — silently deleting Clusters because a WifConfig was removed would be destructive and surprising
+- Con : The caller deleting a lightweight shared resource may not know which high-value resources depend on it
+- Con : Unlike owner/child cascade (where the parent's deletion is clearly the authoritative event), a shared resource deletion is not semantically "the end" of its dependents
+
+</details>
+
+<details>
+<summary><strong>Alternative D — Reverse lookup via a generated nested route on the referenced entity</strong></summary>
+
+Generate routes like `GET /wifconfigs/{id}/clusters` that list all resources referencing the given WifConfig. Mirrors the parent/child route pattern from [§3.2](#32-routes).
+
+- Pro : Clean REST hierarchy — consumers of WifConfig are nested under it
+- Pro : No new query parameters; route structure is self-documenting
+- Con : The referenced entity (WifConfig) is not the owner — embedding referencing resources as nested routes implies ownership semantics that do not exist
+- Con : Route count grows with every reference relationship declared, whereas query parameters on existing list routes add no new routes
+- Con : The referenced entity ID must appear in the URL path, constraining how the route can be composed with other filters
+
+</details>
+
+**Why chosen:** The `resource_references` join table gives the infrastructure visibility into all relationships without scanning JSONB, enables indexed reverse lookups, and supports deletion restriction with a targeted query. `min`/`max` on the descriptor unifies required/optional and single/multiple into one expressive field while keeping cardinality enforcement in one place. Blocking deletion (rather than cascading) is the safe default for shared resources that have no ownership semantics. Query parameters for reverse lookup avoid adding new routes and compose naturally with existing pagination and filtering.
+
+**Cascade delete interaction (explicitly chosen: always restrict)**
+
+The reference restriction applies at every level of an owned-children cascade, not just at the root. When `Delete` is called recursively on a cascade-deleted child, the child's inbound references are checked before it is removed. Two alternatives were rejected:
+
+- *Skip reference check during cascade* — leaves `resource_references` rows pointing to soft-deleted resources, producing dangling references that corrupt subsequent queries and reverse lookups.
+- *`OnTargetDelete` policy on `ReferenceDescriptor`* (cascade or restrict per refType) — adds complexity and creates a path to silently deleting resources the caller did not intend to remove. Shared resources (e.g., a `WifConfig` or an `UpgradePolicy`) referenced by multiple entities should never be destroyed as a side effect of another entity's cascade.
+
+The chosen approach is conservative: if any resource in the cascade tree is referenced, the entire operation fails with a 409 that names the blocking resource and its referencer, giving the caller a clear remediation path.
+
+---
+
+## 12. Risks
 
 ### R1 — Single-table database performance
 
@@ -1288,7 +1631,7 @@ Both Cluster and NodePool share the following structure across all layers:
 | Name max length | 53 chars | 15 chars |
 | Parent reference | None (top-level) | `owner_id` → Cluster |
 | Name uniqueness scope | Global per type | Per parent per type |
-| Route prefix | `/clusters` | `/clusters/{id}/node-pools` |
+| Route prefix | `/clusters` | `/clusters/{id}/nodepools` |
 | Adapter config accessor | `RequiredClusterAdapters()` | `RequiredNodePoolAdapters()` |
 | Spec schema name | `ClusterSpec` | `NodePoolSpec` |
 
@@ -1312,4 +1655,3 @@ Both Cluster and NodePool share the following structure across all layers:
 | **Total** | **~832** | |
 
 ---
-
