@@ -264,7 +264,7 @@ Condition mapping processes operator-controlled configuration and exposes adapte
 
 **Sensitive Field Filtering**: Adapter conditions may contain **sensitive data in custom fields** (e.g., API tokens in `data` field, internal IPs in `message`). Mapping rules MUST NOT expose these fields to external consumers.
 
-**Allowlist Approach**: Only the five standard condition fields are exposed to CEL context: `type`, `status`, `reason`, `message`, `last_transition_time`. The `data` field (adapter-specific JSONB) is **NOT exposed**.
+**Allowlist Approach**: Only the six standard condition fields are exposed to CEL context: `type`, `status`, `reason`, `message`, `observed_generation`, `last_transition_time`. The `data` field (adapter-specific JSONB) is **NOT exposed**.
 
 **Adapter Responsibility**: Adapters MUST follow the [Error Model Standard](../../standards/error-model.md) when populating `type`, `reason`, and `message` fields. These fields are exposed to external consumers via mapped conditions and MUST NOT contain:
 - Internal service URLs or IP addresses
