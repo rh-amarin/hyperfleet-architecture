@@ -24,6 +24,7 @@ Before picking up a ticket, confirm:
 - [ ] Dependencies are identified (ticket has no blockers)
 - [ ] Open questions are answered
 - [ ] Work is sized to complete within a sprint
+- [ ] Required JIRA fields set (see [Ticket Hygiene Standard](../standards/ticket-hygiene.md))
 
 If a ticket is not ready, update it before starting work. If acceptance criteria appear out of date, raise it with the **epic owner** — they are responsible for keeping acceptance criteria current across their epic.
 

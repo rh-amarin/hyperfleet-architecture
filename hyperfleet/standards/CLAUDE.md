@@ -40,6 +40,7 @@ Reference these when working with standards (non-exhaustive - see `hyperfleet/st
 | `logging-specification.md` | Logging format and levels |
 | `makefile-conventions.md` | Makefile patterns |
 | `metrics.md` | Prometheus metrics |
+| `ticket-hygiene.md` | JIRA ticket field requirements and sprint readiness |
 | `tracing.md` | Distributed tracing |
 
 ## RFC 2119 Language

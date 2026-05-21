@@ -169,6 +169,7 @@ architecture/
 | | [Health Endpoints](hyperfleet/standards/health-endpoints.md) | `/healthz` and `/readyz` endpoint contracts |
 | **Deployment** | [Container Image Standard](hyperfleet/standards/container-image-standard.md) | Base images, labels, and image build requirements |
 | | [Helm Chart Conventions](hyperfleet/standards/helm-chart-conventions.md) | Chart structure, values schema, and naming conventions |
+| **Process** | [Ticket Hygiene](hyperfleet/standards/ticket-hygiene.md) | JIRA ticket field requirements and sprint readiness |
 
 **When to update**: When a standard changes or a new cross-cutting rule is introduced
 
