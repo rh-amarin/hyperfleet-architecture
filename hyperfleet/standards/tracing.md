@@ -114,7 +114,7 @@ All components MUST support tracing configuration via **environment variables**.
 | `OTEL_TRACES_SAMPLER_ARG` | `1.0` | Sampler argument (ratio for ratio-based samplers) |
 | `OTEL_PROPAGATORS` | `tracecontext,baggage` | Context propagators |
 | `OTEL_RESOURCE_ATTRIBUTES` | - | Additional resource attributes |
-| `HYPERFLEET_TRACING_ENABLED` | `true` | Enable/disable tracing |
+| `HYPERFLEET_TRACING_ENABLED` | `false` | Enable/disable tracing |
 
 ### Service Names
 
