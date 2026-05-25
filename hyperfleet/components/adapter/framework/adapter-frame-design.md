@@ -1,7 +1,7 @@
 ---
 Status: Active
 Owner: HyperFleet Adapter Team
-Last Updated: 2026-04-03
+Last Updated: 2026-05-25
 ---
 
 # HyperFleet Adapter Framework - Design Document
@@ -74,7 +74,7 @@ This document describes the design of the HyperFleet Adapter Framework, a config
 graph TB
     subgraph MainService["Main Service (cmd/adapter/main.go)"]
         direction TB
-        
+
         subgraph Components["Core Components"]
             ConfigLoader["Config Loader<br/>(internal/config_loader)"]
             BrokerConsumer["Broker Consumer<br/>(internal/broker_consumer)"]
@@ -83,13 +83,13 @@ graph TB
             APIClient["API Client<br/>(internal/hyperfleet_api)"]
             Reporter["Status Reporter<br/>(integrated in API client)"]
         end
-        
+
         subgraph Support["Supporting Packages"]
             Logger["Logger<br/>(pkg/logger)"]
             Errors["Error Handler<br/>(pkg/errors)"]
         end
     end
-    
+
     subgraph External["External Systems"]
         ConfigYAML["Adapter Config<br/>(adapter-config.yaml)"]
         BrokerLib["HyperFleet Broker Library<br/>(github.com/openshift-hyperfleet/hyperfleet-broker)"]
@@ -97,17 +97,17 @@ graph TB
         K8sAPI["Kubernetes API"]
         HyperFleetAPI["HyperFleet API"]
     end
-    
+
     ConfigLoader -->|Reads| ConfigYAML
     BrokerConsumer -->|Imports & Uses| BrokerLib
     BrokerLib -->|Connects| MessageBroker
     K8sClient -->|CRUD Operations| K8sAPI
     APIClient -->|REST Calls| HyperFleetAPI
     Reporter -->|PUT Status| HyperFleetAPI
-    
+
     Logger -.->|Used by| Components
     Errors -.->|Used by| Components
-    
+
     style MainService fill:#e1f5ff,stroke:#0066cc,stroke-width:3px
     style Components fill:#fff,stroke:#0066cc,stroke-width:2px
     style Support fill:#f0f0f0,stroke:#666,stroke-width:1px
@@ -195,17 +195,17 @@ for event := range broker.Subscribe() {
     params := ExtractParams(event, config.Params)
     // params["clusterId"] = "cluster-123"  ← Different per event
     // params["resourceId"] = "resource-456" ← Different per event
-    
+
     // Render templates with event-specific values
     resources := RenderResources(config.Resources, params)
     // Generated: "cluster-cluster-123-namespace" ← Dynamic!
-    
+
     // Create resources in Kubernetes
     CreateResources(resources)
 }
 ```
 
-**Key Insight**: 
+**Key Insight**:
 - **Config = Static Template** (loaded once, defines the structure)
 - **Event Data = Dynamic Values** (different per event, fills in the template)
 - **Result = Dynamic Resources** (generated for each specific cluster/resource)
@@ -460,24 +460,24 @@ graph TB
     subgraph AdapterFramework["Adapter Framework (This Component)"]
         BrokerConsumer["internal/broker_consumer/<br/><br/>- Imports broker library<br/>- Uses Publish/Subscribe interfaces<br/>- Handles CloudEvents<br/>- Routes to event handlers"]
     end
-    
+
     subgraph BrokerLibrary["HyperFleet Broker Library<br/>github.com/openshift-hyperfleet/hyperfleet-broker"]
         direction TB
         Interface["Broker Interfaces (Pub/Sub)"]
-        
+
         Subscriber["type Subscriber interface {<br/>  Subscribe(ctx, topic, handler)<br/>  Close() error<br/>}"]
-        
+
         Publisher["type Publisher interface {<br/>  Publish(ctx, topic, event)<br/>}"]
-        
+
         Implementations["Implementations:<br/>• PubSubClient (Google Cloud Pub/Sub)<br/>• SQSClient (AWS SQS)<br/>• RabbitMQClient (RabbitMQ)"]
-        
+
         Interface --> Subscriber
         Interface --> Publisher
         Interface --> Implementations
     end
-    
+
     BrokerConsumer -->|import & use| Interface
-    
+
     style AdapterFramework fill:#e1f5ff,stroke:#0066cc,stroke-width:3px
     style BrokerLibrary fill:#fff4e1,stroke:#cc8800,stroke-width:3px
     style BrokerConsumer fill:#fff,stroke:#0066cc,stroke-width:2px
@@ -560,10 +560,10 @@ semaphore := make(chan struct{}, config.MessageBroker.MaxConcurrency)
 subscriber.Subscribe(ctx, func(ctx context.Context, msg []byte) error {
     // Acquire semaphore (blocks if maxConcurrency reached)
     semaphore <- struct{}{}
-    
+
     go func() {
         defer func() { <-semaphore }() // Release semaphore
-        
+
         // Process event (preconditions, resources, status)
         processEvent(ctx, msg)
     }()
@@ -808,10 +808,10 @@ subscriber.Subscribe(ctx, func(ctx context.Context, msg []byte) error {
 - Metrics server on `observability.metricsPort` (Prometheus metrics)
 - Health server on `observability.healthPort` (`/healthz`, `/readyz`)
 
-**Error Handling:**
-- Log errors at appropriate levels
-- Retry transient failures
-- Nack messages on permanent failures
+**Error Handling (see [ADR-0017](../../../adrs/0017-adapter-error-taxonomy.md)):**
+- Classify errors as Transient or Terminal
+- Transient errors: return error to broker (NACK — broker redelivers with backoff)
+- Terminal errors: report status to API, log at error level, return nil (ACK — prevent redelivery)
 - Continue processing other events on individual failures
 
 **Graceful Shutdown:**
@@ -840,31 +840,31 @@ sequenceDiagram
     participant Broker as Broker Library
     participant K8s as Kubernetes Client
     participant API as HyperFleet API Client
-    
+
     Pod->>Config: Load Adapter Configuration (ONE TIME)
     Config->>Config: Read /etc/adapter/config/adapter-config.yaml
     Config->>Config: Parse YAML structure
     Config->>Config: Validate configuration
-    
+
     Config->>Evaluator: Compile CEL expressions
     Note over Evaluator: • preconditions<br/>• post conditions<br/>• data expressions
     Evaluator-->>Config: Compiled expressions
-    
+
     Config->>Config: Store as in-memory template
     Note over Config: Config defines (STATIC):<br/>• Resource templates with {{ .vars }}<br/>• Parameters extraction rules<br/>• Post-processing structure
-    
+
     Pod->>API: Initialize API Client
     API-->>Pod: Ready
-    
+
     Pod->>K8s: Initialize K8s Client
     K8s-->>Pod: Ready
-    
+
     Pod->>Broker: Initialize Broker Consumer
     Note over Broker: Broker library loads config<br/>from environment variables
     Broker->>Broker: Connect to message broker
     Broker->>Broker: Subscribe to topic/queue
     Broker-->>Pod: Ready to receive events
-    
+
     Note over Pod: Adapter Ready<br/>Waiting for CloudEvents...
 ```
 
@@ -878,17 +878,17 @@ graph LR
         F1 --> R1[Render templates:<br/>name: cluster-{{ .clusterId }}<br/>→ cluster-cluster-abc123]
         R1 --> C1[Create resources:<br/>cluster-abc123-ns<br/>cluster-abc123-job]
     end
-    
+
     subgraph Event2["Event 2: cluster-xyz789"]
         E2[CloudEvent] --> X2[Extract clusterId:<br/>cluster-xyz789]
         X2 --> F2[Fetch cluster data<br/>GET /clusters/cluster-xyz789]
         F2 --> R2[Render templates:<br/>name: cluster-{{ .clusterId }}<br/>→ cluster-cluster-xyz789]
         R2 --> C2[Create resources:<br/>cluster-xyz789-ns<br/>cluster-xyz789-job]
     end
-    
+
     Config[Static Config Template<br/>Loaded Once at Startup] -.->|Used by| R1
     Config -.->|Used by| R2
-    
+
     style Config fill:#e1f5ff
     style E1 fill:#e1ffe1
     style E2 fill:#ffe1e1
@@ -901,19 +901,19 @@ graph TB
     subgraph Static["Static Config (Loaded Once at Startup)"]
         Template["Resource Template:<br/>name: cluster-{{ .clusterId }}<br/>labels:<br/>  cluster-id: {{ .clusterId }}"]
     end
-    
+
     subgraph Dynamic["Dynamic Event Data (Per Event)"]
         Event["CloudEvent Data:<br/>event.id: 1111...<br/>event.kind: Cluster"]
     end
-    
+
     subgraph Result["Rendered Resource (Generated Per Event)"]
         Resource["Kubernetes Resource:<br/>name: cluster-cluster-abc123<br/>labels:<br/>  cluster-id: cluster-abc123"]
     end
-    
+
     Template -->|Template + Data| Render[Template Rendering Engine]
     Event -->|Variables| Render
     Render -->|Generates| Resource
-    
+
     style Static fill:#e1f5ff,stroke:#0066cc,stroke-width:2px
     style Dynamic fill:#ffe1e1,stroke:#cc0000,stroke-width:2px
     style Result fill:#e1ffe1,stroke:#00cc00,stroke-width:2px
@@ -1063,10 +1063,10 @@ for event := range events {
 func ProcessEvent(event CloudEvent) {
     // Tracking only for this event's lifecycle
     tracker := NewResourceTracker()
-    
+
     resources := CreateResources(event, tracker)
     ReportStatus(event, resources)
-    
+
     // tracker goes out of scope, GC'd
 }
 ```
@@ -1130,25 +1130,25 @@ for event := range events {
 func ProcessEvent(ctx context.Context, event CloudEvent) error {
     // 1. Extract parameters (small, temporary)
     params := ExtractParameters(event)
-    
+
     // 2. Fetch cluster (temporary, GC'd after function)
     cluster := apiClient.GetCluster(params.ClusterID)
-    
+
     // 3. Evaluate preconditions (temporary variables)
     if !EvaluatePreconditions(cluster, params) {
         ReportStatus(Failed)
         return nil  // Early exit, memory released
     }
-    
+
     // 4. Render templates (temporary)
     resources := RenderResources(config.Resources, params, cluster)
-    
+
     // 5. Create resources (Kubernetes API call, no local storage)
     CreateResources(resources)
-    
+
     // 6. Report status (HTTP call, no local storage)
     ReportStatus(Success)
-    
+
     // All variables go out of scope, GC'd
     return nil
 }
@@ -1204,7 +1204,7 @@ rate(go_gc_duration_seconds[5m]) // GC frequency
 # Memory approaching limit
 - alert: AdapterHighMemoryUsage
   expr: container_memory_usage_bytes / container_memory_limit_bytes > 0.8
-  
+
 # Goroutine leak
 - alert: AdapterGoroutineLeak
   expr: rate(go_goroutines[5m]) > 0  # Should be constant
@@ -1245,7 +1245,7 @@ If memory becomes a concern, consider:
    ```bash
    # Enable pprof endpoint
    go tool pprof http://adapter:6060/debug/pprof/heap
-   
+
    # Analyze memory allocations
    go tool pprof -alloc_space http://adapter:6060/debug/pprof/allocs
    ```
@@ -1285,14 +1285,36 @@ If memory becomes a concern, consider:
 
 ## Error Handling Strategy
 
+> **Full specification:** [ADR-0017 — Selective Message Acknowledgment](../../../adrs/0017-adapter-error-taxonomy.md) | [Error Handling Guide](./adapter-error-handling.md)
+
+Every error during event processing is classified as **Transient** or **Terminal**:
+
+- **Transient** — expected to resolve without human intervention (e.g., HTTP 5xx, rate limits, network timeouts). The handler returns `error` so the broker library NACKs the message and redelivers it with backoff.
+- **Terminal** — will not resolve on retry (e.g., HTTP 400/403/404, malformed event, invalid manifest). The handler reports error status to the API, logs at `error` level, and returns `nil` so the broker library ACKs the message.
+
+Messages that exhaust the broker's max delivery attempts (5) are routed to a Dead Letter Queue (DLQ) for operator inspection and replay.
+
+Handlers classify errors using the `IsTransient(err error) bool` helper. See the [Error Handling Guide](./adapter-error-handling.md#error-classification-helper) for the classification logic and error mapping tables.
+
+### Startup Errors (Fail Fast)
+
 1. **Configuration Errors**: Fail fast at startup
 2. **Expression Compilation Errors**: Fail fast at startup (if `compileOnStartup: true`)
-3. **Broker Connection Errors**: Retry with exponential backoff
-4. **API Call Errors**: Retry based on config (post-MVP)
-5. **Kubernetes Errors**: Log and continue (may retry based on error type)
-6. **Expression Evaluation Errors**: Log error, skip condition/data evaluation
-7. **Status Reporting Errors**: Log error, may retry (post-MVP)
-8. **Memory Limit Exceeded**: Kubernetes OOMKill, pod restarts (should not happen with proper limits)
+
+### Runtime Errors (Per-Event Classification)
+
+| Error Source | Transient Examples | Terminal Examples |
+|-------------|-------------------|-------------------|
+| HyperFleet API | 429, 500–504, connection timeout | 400, 401, 403, 404, 422 |
+| Kubernetes API | ServerTimeout, 429, 500, Conflict (409) | Forbidden (403), Invalid (400), Unauthorized (401) |
+| Cloud Provider | 429, 500–504, network timeout | 400, 401/403, 404, hard quota exceeded |
+| Broker | Connection lost/timeout | Malformed event, missing required fields |
+| Internal | Context deadline exceeded, memory pressure | CEL evaluation error, template rendering error, panic |
+
+### Infrastructure Errors
+
+- **Broker Connection Errors**: Retry with exponential backoff (handled by broker library)
+- **Memory Limit Exceeded**: Kubernetes OOMKill, pod restarts (should not happen with proper limits)
 
 ## Observability
 
@@ -1354,6 +1376,12 @@ TRACE_SAMPLE_RATE: "0.1"    # 10% sampling in production
 - `adapter_status_reports_total{adapter, status}`: Status report count
 - `adapter_status_report_duration_seconds{adapter}`: Status report latency
 
+**Error Classification ([Error Handling Guide](./adapter-error-handling.md)):**
+- `hyperfleet_adapter_errors_total{adapter, classification, error_type}`: Total errors by classification (transient/terminal) and type
+- `hyperfleet_adapter_terminal_errors_total{adapter, error_type, source}`: Terminal errors that were ACK'd and reported
+- `hyperfleet_adapter_nacks_total{adapter}`: Messages NACK'd for retry
+- `hyperfleet_adapter_dlq_messages_total{adapter}`: Messages routed to DLQ (max retries exceeded)
+
 **Memory and Performance:**
 - `go_memstats_alloc_bytes`: Current allocated memory
 - `go_memstats_heap_inuse_bytes`: Heap memory in use
@@ -1367,6 +1395,7 @@ TRACE_SAMPLE_RATE: "0.1"    # 10% sampling in production
 - Log level from `LOG_LEVEL` environment variable
 - Log format from `LOG_FORMAT` environment variable (json, console)
 - Contextual fields: event ID, cluster ID, adapter name, processing time
+- Error classification fields ([Error Handling Guide](./adapter-error-handling.md)): `error_classification` (transient/terminal), `error_type` (e.g., InvalidManifest), `action` (e.g., ack_and_report, nack_for_retry)
 
 **Example:**
 ```json
