@@ -124,7 +124,7 @@ See `sentinel/sentinel.md` for an example with:
 - Detailed How section with diagrams
 - Test scenarios documented
 
-**Note**: sentinel.md predates these guidelines and does not yet include Trade-offs or Alternatives Considered sections.
+**Note**: sentinel.md now includes Trade-offs and Alternatives Considered sections and can be used as a reference for the full component document pattern.
 
 ## Common Mistakes to Avoid
 
