@@ -1,7 +1,7 @@
 ---
-Status: Draft
+Status: Active
 Owner: HyperFleet Team
-Last Updated: 2026-04-14
+Last Updated: 2026-05-25
 ---
 
 # HyperFleet Working Agreement
@@ -61,14 +61,15 @@ If a ticket is not ready, update it before starting work. If acceptance criteria
 - If a PR has no review activity after 24 hours, bump the Slack thread with a reminder
 - For urgent changes, use judgement but document rationale clearly
 - For major architectural changes, wait for at least one Technical Leader review
+- Use the Jira Development Panel to track PR status directly from the ticket (see [GitHub-Jira Integration](github-jira-integration.md))
 - Merge once approved with no objections
 
 ### 5. Close the Ticket
 
 - Verify acceptance criteria are met (or trade-offs are documented)
 - Update the architecture repo if needed (see [Architecture Doc Maintenance](#architecture-doc-maintenance))
-- Link the PR in the Jira ticket
-- Move to **Done**
+- Link the PR in the Jira ticket (if you followed the branch naming convention, the PR is already linked automatically via the [GitHub-Jira integration](github-jira-integration.md))
+- Confirm the PR is **merged** and appears in the Jira Development Panel before moving to **Done**
 
 ---
 
@@ -113,12 +114,12 @@ Update the architecture repo when closing a ticket if the work:
 
 ### What to Document
 
-| Change Type | Where to Document |
-|---|---|
-| Component design changes | `hyperfleet/components/` |
-| New standards or conventions | `hyperfleet/standards/` |
-| Implementation guides, runbooks | `hyperfleet/docs/` |
-| Architecture decisions | `hyperfleet/adrs/` |
+| Change Type                     | Where to Document        |
+| ------------------------------- | ------------------------ |
+| Component design changes        | `hyperfleet/components/` |
+| New standards or conventions    | `hyperfleet/standards/`  |
+| Implementation guides, runbooks | `hyperfleet/docs/`       |
+| Architecture decisions          | `hyperfleet/adrs/`       |
 
 ### How to Keep in Sync
 
@@ -155,12 +156,12 @@ When you need to deviate from acceptance criteria:
 
 ### Channel Map
 
-| Channel | Purpose | Response Expectation |
-|---------|---------|---------------------|
-| #hcm-hyperfleet-team (Slack) | PR links, team updates, quick questions | Same business day |
-| Jira comments | Ticket-specific decisions, trade-offs, blockers | End of next business day |
-| Architecture repo PRs | Design decisions, standards changes | 24 hours |
-| Direct Slack DM | Sensitive or personal topics only | Best effort |
+| Channel                      | Purpose                                         | Response Expectation     |
+| ---------------------------- | ----------------------------------------------- | ------------------------ |
+| #hcm-hyperfleet-team (Slack) | PR links, team updates, quick questions         | Same business day        |
+| Jira comments                | Ticket-specific decisions, trade-offs, blockers | End of next business day |
+| Architecture repo PRs        | Design decisions, standards changes             | 24 hours                 |
+| Direct Slack DM              | Sensitive or personal topics only               | Best effort              |
 
 ### Principles
 
@@ -220,11 +221,11 @@ When you need to deviate from acceptance criteria:
 
 A ticket is done when all three are complete:
 
-| Area | Criteria |
-|---|---|
-| **Code** | Meets acceptance criteria (or documented trade-offs). Follows [engineering standards](../standards/). Passes CI (build, lint, security scans). |
-| **Tests** | Unit tests for core logic. Integration tests where components interact. E2E tests for critical flows where applicable. All tests passing in CI. |
-| **Documentation** | Code comments for complex logic. Usage/operational documentation. Architecture repo updated if the work changes system behavior. |
+| Area              | Criteria                                                                                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Code**          | Meets acceptance criteria (or documented trade-offs). Follows [engineering standards](../standards/). Passes CI (build, lint, security scans).  |
+| **Tests**         | Unit tests for core logic. Integration tests where components interact. E2E tests for critical flows where applicable. All tests passing in CI. |
+| **Documentation** | Code comments for complex logic. Usage/operational documentation. Architecture repo updated if the work changes system behavior.                |
 
 ---
 
