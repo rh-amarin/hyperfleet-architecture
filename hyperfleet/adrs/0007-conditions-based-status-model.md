@@ -1,7 +1,7 @@
 ---
 Status: Active
 Owner: HyperFleet Architecture Team
-Last Updated: 2026-04-15
+Last Updated: 2026-05-25
 ---
 
 # 0007 — Kubernetes-Style Conditions-Based Status Model
@@ -30,6 +30,14 @@ Two conditions are mandatory on all resources: **`Available`** and **`Ready`**. 
 **Gains:** Condition granularity exposes partial readiness (e.g., DNS adapter done, HyperShift adapter still running); `observed_generation` on each condition lets clients distinguish "not yet reconciled at this generation" from "reconciliation failed"; the model is familiar to Kubernetes practitioners and aligns with the OCM/HyperShift condition conventions used downstream.
 
 **Trade-offs:** Breaking change from the phase-based model (removed in v0.1.0, not backwards-compatible); Adapter authors must report typed conditions rather than a simple status field; the mandatory `Available` and `Ready` conditions add an opinion about which conditions matter, which may not fit all future resource types.
+
+## Consequences - Evolution
+
+**Mapped Conditions (Added 2026-05):** The original ADR established two condition sources: system-computed aggregated conditions (`Reconciled`, `LastKnownReconciled`) and adapter-reported conditions (stored internally in `adapter_statuses`). A third category was added via [Condition Mapping Design](../hyperfleet/components/api-service/condition-mapping-design.md): **mapped conditions** — resource conditions dynamically created from adapter conditions using CEL-based transformation rules.
+
+**Why Added:** Rich provider-specific conditions (e.g., ROSA control plane status, GCP quota availability) existed in adapter conditions but were not exposed in the public `status.conditions` array. External consumers (CLI, UI, customer integrations) could not access these provider health signals. Mapped conditions solve this by allowing operators to configure CEL rules that selectively copy/transform adapter conditions into customer-visible resource conditions.
+
+**Impact on ADR:** The True/False/Unknown contract established in this ADR remains unchanged for resource conditions — mapped conditions enforce True/False-only by automatically filtering out adapter conditions with `status="Unknown"` during evaluation. The condition structure (six standard fields) remains identical. This evolution extends the model's reach without altering its core contract.
 
 ## Alternatives Considered
 
