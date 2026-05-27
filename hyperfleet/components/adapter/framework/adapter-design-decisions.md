@@ -1,7 +1,7 @@
 ---
 Status: Active
 Owner: HyperFleet Adapter Team
-Last Updated: 2025-12-30
+Last Updated: 2026-05-25
 ---
 
 # HyperFleet Adapter Framework - Design Decisions
@@ -13,6 +13,8 @@ This document captures the key design decisions, trade-offs, and rationale behin
 **Related Documentation:**
 - [Adapter Framework Design](./adapter-frame-design.md) - Architecture overview
 - [Adapter Status Contract](./adapter-status-contract.md) - Status reporting contract
+- [ADR-0017 — Selective Message Acknowledgment](../../../adrs/0017-adapter-error-taxonomy.md) - Selective ACK/NACK based on error classification
+- [Adapter Error Handling Guide](./adapter-error-handling.md) - Error mapping tables, DLQ configuration, and observability
 - `adapter-config-template-MVP.yaml` - Configuration structure
 
 ---
@@ -162,7 +164,7 @@ This document captures the key design decisions, trade-offs, and rationale behin
 adapter: "example-adapter"  # Adapter name for tracking
 conditions:                  # Array of condition objects
   - type: "Applied"          # Resources created/configured
-  - type: "Available"        # Workload ready/operational  
+  - type: "Available"        # Workload ready/operational
   - type: "Health"           # No degradation/errors
 data: {}                     # Optional adapter-specific data
 observed_generation: 5       # Event generation that was processed
@@ -474,4 +476,3 @@ when:
 - Multi-cloud support (AWS, Azure)
 - Advanced expression language features
 - Custom resource type support
-
