@@ -136,27 +136,27 @@ adapters:
       # Map key is the output_type (target condition type)
       ROSAControlPlaneReady:
         when:
-          expression: conditions.exists(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")
+          expression: statuses.exists(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")
         output:
           status:
-            expression: conditions.filter(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")[0].status
+            expression: statuses.filter(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")[0].status
           reason:
-            expression: conditions.filter(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")[0].reason
+            expression: statuses.filter(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")[0].reason
           message:
-            expression: '"ROSA: " + conditions.filter(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")[0].message'
+            expression: '"ROSA: " + statuses.filter(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")[0].message'
 
       # Example 2: Cross-adapter aggregation (cluster health from multiple adapters)
       # Map key is the output_type (target condition type)
       ClusterHealthy:
         when:
           expression: |
-            conditions.exists(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady") &&
-            conditions.exists(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")
+            statuses.exists(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady") &&
+            statuses.exists(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")
         output:
           status:
-            expression: conditions.filter(c, (c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady") || (c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")).all(c, c.status == "True") ? "True" : "False"
+            expression: statuses.filter(c, (c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady") || (c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")).all(c, c.status == "True") ? "True" : "False"
           reason:
-            expression: conditions.filter(c, (c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady") || (c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")).all(c, c.status == "True") ? "Healthy" : "Degraded"
+            expression: statuses.filter(c, (c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady") || (c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")).all(c, c.status == "True") ? "Healthy" : "Degraded"
           message:
             expression: '"Cluster health based on ROSA control plane and GCP quota"'
       
@@ -164,14 +164,14 @@ adapters:
       # Map key is the output_type (target condition type)
       GCPQuotaStatus:
         when:
-          expression: conditions.exists(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable" && has(c.data.quotaRemaining))
+          expression: statuses.exists(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable" && has(c.data.quotaRemaining))
         output:
           status:
-            expression: conditions.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining > 10 ? "True" : "False"
+            expression: statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining > 10 ? "True" : "False"
           reason:
-            expression: conditions.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining > 10 ? "SufficientQuota" : "LowQuota"
+            expression: statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining > 10 ? "SufficientQuota" : "LowQuota"
           message:
-            expression: '"GCP quota remaining: " + string(conditions.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining)'
+            expression: '"GCP quota remaining: " + string(statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining)'
 ```
 
 ### Rule Execution Model
@@ -181,10 +181,10 @@ Each rule executes **once per PUT /statuses request**, producing **at most one r
 1. **Conditional evaluation**: The `when.expression` is evaluated once. If it returns `false`, the rule is skipped entirely.
 2. **Output generation**: If the `when.expression` returns `true`, the `output.*.expression` fields execute to produce one resource condition.
 3. **Cardinality control**: Rules use CEL expressions to decide how to handle multiple matching conditions:
-   - **Single condition**: Use `conditions.filter(...)[0]` to take the first match
-   - **Aggregate multiple**: Use `conditions.filter(...).all()`, `.exists()`, or `.map()` to merge signals
+   - **Single condition**: Use `statuses.filter(...)[0]` to take the first match
+   - **Aggregate multiple**: Use `statuses.filter(...).all()`, `.exists()`, or `.map()` to merge signals
 
-**Example**: A rule with `when.expression: conditions.exists(c, c.type.startsWith("GCP"))` will fire if **any** GCP condition exists, but produces only **one** output condition. The `output.status.expression` decides how to aggregate (e.g., `all(c, c.status == "True")`).
+**Example**: A rule with `when.expression: statuses.exists(c, c.type.startsWith("GCP"))` will fire if **any** GCP condition exists, but produces only **one** output condition. The `output.status.expression` decides how to aggregate (e.g., `all(c, c.status == "True")`).
 
 **DSL Consistency**: The nested `when.expression` and `output.*.expression` format aligns with adapter and Sentinel CEL configurations (see [Adapter Framework Design](../adapter/framework/adapter-frame-design.md)), ensuring consistent syntax across all HyperFleet components.
 
@@ -284,7 +284,7 @@ Condition mapping processes operator-controlled configuration and exposes adapte
 - **Testing in non-production environments** — validate mapping rules do not leak sensitive data before deploying to production
 - **Reviewing adapter `data` schemas** — understand what data adapters store in the `data` field
 - **Auditing mapped conditions** — verify mapped conditions only expose customer-visible status, not internal implementation details
-- **Using CEL filtering** — use CEL expressions to selectively extract non-sensitive fields from `data` (e.g., `conditions.filter(...)[0].data.publicField` instead of exposing the entire `data` object)
+- **Using CEL filtering** — use CEL expressions to selectively extract non-sensitive fields from `data` (e.g., `statuses.filter(...)[0].data.publicField` instead of exposing the entire `data` object)
 
 **Adapter Responsibility**: Adapters MUST follow the [Error Model Standard](../../standards/error-model.md) when populating `type`, `reason`, and `message` fields. These fields are exposed to external consumers via mapped conditions and MUST NOT contain:
 - Internal service URLs or IP addresses
@@ -314,14 +314,14 @@ Condition mapping processes operator-controlled configuration and exposes adapte
 ```yaml
 ROSAControlPlaneReady:  # Map key is the output condition type
   when:
-    expression: conditions.exists(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")
+    expression: statuses.exists(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")
   output:
     status:
-      expression: conditions.filter(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")[0].status
+      expression: statuses.filter(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")[0].status
     reason:
-      expression: conditions.filter(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")[0].reason
+      expression: statuses.filter(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")[0].reason
     message:
-      expression: '"ROSA: " + conditions.filter(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")[0].message'
+      expression: '"ROSA: " + statuses.filter(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady")[0].message'
 ```
 
 **Input** (adapter condition from rosa-adapter):
@@ -341,13 +341,13 @@ ROSAControlPlaneReady:  # Map key is the output condition type
 ClusterHealthy:  # Map key is the output condition type
   when:
     expression: |
-      conditions.exists(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady") &&
-      conditions.exists(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")
+      statuses.exists(c, c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady") &&
+      statuses.exists(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")
   output:
     status:
-      expression: conditions.filter(c, (c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady") || (c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")).all(c, c.status == "True") ? "True" : "False"
+      expression: statuses.filter(c, (c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady") || (c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")).all(c, c.status == "True") ? "True" : "False"
     reason:
-      expression: conditions.filter(c, (c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady") || (c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")).all(c, c.status == "True") ? "Healthy" : "Degraded"
+      expression: statuses.filter(c, (c.adapter == "rosa-adapter" && c.type == "ControlPlaneReady") || (c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")).all(c, c.status == "True") ? "Healthy" : "Degraded"
     message:
       expression: '"Cluster health based on ROSA control plane and GCP quota"'
 ```
@@ -371,14 +371,14 @@ ClusterHealthy:  # Map key is the output condition type
 ```yaml
 GCPQuotaDetails:  # Map key is the output condition type
   when:
-    expression: conditions.exists(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable" && has(c.data.quotaRemaining))
+    expression: statuses.exists(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable" && has(c.data.quotaRemaining))
   output:
     status:
-      expression: conditions.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining > 10 ? "True" : "False"
+      expression: statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining > 10 ? "True" : "False"
     reason:
-      expression: conditions.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining > 10 ? "SufficientQuota" : "LowQuota"
+      expression: statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining > 10 ? "SufficientQuota" : "LowQuota"
     message:
-      expression: '"GCP quota remaining: " + string(conditions.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining)'
+      expression: '"GCP quota remaining: " + string(statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining)'
 ```
 
 **Input** (adapter condition from gcp-adapter with `data` field):
@@ -431,7 +431,7 @@ GCPQuotaDetails:  # Map key is the output condition type
 - Debugging mapping failures is rare (fail-fast at startup catches most issues)
 - Adapter condition naming stability is expected (breaking changes require coordination anyway)
 - MVP focuses on unblocking Sentinel and external consumers; optimization follows
-- Security risk of exposing `data` field is acceptable because: (1) mapping config requires cluster-admin RBAC permissions and CI validation (see Access Control § 3), preventing unauthorized changes; (2) operators are expected to test rules in non-production environments before deploying; (3) partners need flexibility to extract adapter-specific structured data without waiting for API changes; (4) restricting `data` access would force partners to report duplicate information via dedicated condition types, increasing adapter complexity
+- Security risk of exposing `data` field is acceptable because: (1) mapping config requires cluster-admin RBAC permissions (see Access Control § 3), preventing unauthorized changes; (2) operators are expected to test rules in non-production environments before deploying; (3) partners need flexibility to extract adapter-specific structured data without waiting for API changes; (4) restricting `data` access would force partners to report duplicate information via dedicated condition types, increasing adapter complexity
 - No timeouts in MVP is acceptable because: (1) mapping rules are operator-controlled configuration validated at startup — malicious or broken expressions are caught before deployment; (2) adoption patterns and typical CEL complexity are unknown — premature optimization; (3) CEL library limits (1000 AST nodes, 32 nesting levels) prevent most pathological cases; (4) timeouts can be added later based on production metrics if needed
 
 ---
