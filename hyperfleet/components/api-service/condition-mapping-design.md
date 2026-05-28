@@ -164,14 +164,14 @@ adapters:
       # Map key is the output_type (target condition type)
       GCPQuotaStatus:
         when:
-          expression: statuses.exists(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable" && has(c.data.quotaRemaining))
+          expression: statuses.exists(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable" && c.?data.?quotaRemaining.hasValue())
         output:
           status:
-            expression: statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining > 10 ? "True" : "False"
+            expression: statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].?data.?quotaRemaining.orValue(0) > 10 ? "True" : "False"
           reason:
-            expression: statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining > 10 ? "SufficientQuota" : "LowQuota"
+            expression: statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].?data.?quotaRemaining.orValue(0) > 10 ? "SufficientQuota" : "LowQuota"
           message:
-            expression: '"GCP quota remaining: " + string(statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining)'
+            expression: '"GCP quota remaining: " + string(statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].?data.?quotaRemaining.orValue(0))'
 ```
 
 ### Rule Execution Model
@@ -223,7 +223,21 @@ All rule CEL expressions have access to the same context:
   - `resource.generation` — current resource generation number (alias: `resourceGeneration`)
 - `env` — environment variables map (e.g., `env.ENVIRONMENT`, `env.CLUSTER_REGION`) for environment-specific mapping logic
 
-**Field Allowlist**: All condition fields are exposed to CEL, including the six standard fields (`type`, `status`, `reason`, `message`, `observed_generation`, `last_transition_time`), `adapter`, and `data` (adapter-specific JSONB). **Operator Responsibility**: The `data` field may contain sensitive information (API tokens, internal IPs, credentials). Operators configuring mapping rules are responsible for ensuring that sensitive data is not exposed to external consumers via mapped conditions. Test mapping rules thoroughly in non-production environments before deploying to production.
+**Safe Navigation Pattern** (HyperFleet CEL Standard):
+
+When accessing optional/nested fields (like `data`), use the **safe navigation operator (`?`)** to prevent errors:
+
+| Pattern | Example | Behavior |
+|---------|---------|----------|
+| ❌ **Unsafe** | `has(c.data.quotaRemaining)` | Fails with error if `data` field doesn't exist |
+| ✅ **Safe (check)** | `c.?data.?quotaRemaining.hasValue()` | Returns `false` if `data` or `quotaRemaining` missing; `true` if present |
+| ✅ **Safe (access)** | `c.?data.?quotaRemaining.orValue(0)` | Returns `0` if missing; actual value otherwise |
+
+**Why**: The optional `?` operator safely accesses maps without errors on missing keys. Combined with `hasValue()` (for existence checks) and `orValue(default)` (for safe access with defaults), this pattern handles all states: key missing, key with nil value, key with value.
+
+**Reference**: See [Adapter Framework — CEL resource presence pattern](../adapter/framework/adapter-deletion-flow-design.md#example-task-config-with-deletion) for detailed rationale on why `has()` and direct access are unsafe.
+
+**Field Allowlist**: All condition fields are exposed to CEL, including the six standard fields (`type`, `status`, `reason`, `message`, `observed_generation`, `last_transition_time`), `adapter`, and `data` (adapter-specific JSONB). **Operator Responsibility**: The `data` field may contain sensitive information (API tokens, internal IPs, credentials). Operators configuring mapping rules are responsible for ensuring that sensitive data is not exposed to external consumers via mapped conditions. Use safe navigation (`c.?data.?field.hasValue()` / `orValue(default)`) when accessing optional fields. Test mapping rules thoroughly in non-production environments before deploying to production.
 
 ### Integration Point
 
@@ -284,7 +298,7 @@ Condition mapping processes operator-controlled configuration and exposes adapte
 - **Testing in non-production environments** — validate mapping rules do not leak sensitive data before deploying to production
 - **Reviewing adapter `data` schemas** — understand what data adapters store in the `data` field
 - **Auditing mapped conditions** — verify mapped conditions only expose customer-visible status, not internal implementation details
-- **Using CEL filtering** — use CEL expressions to selectively extract non-sensitive fields from `data` (e.g., `statuses.filter(...)[0].data.publicField` instead of exposing the entire `data` object)
+- **Using CEL filtering** — use CEL expressions to selectively extract non-sensitive fields from `data` (e.g., `statuses.filter(...)[0].?data.?publicField.orValue("")` instead of exposing the entire `data` object)
 
 **Adapter Responsibility**: Adapters MUST follow the [Error Model Standard](../../standards/error-model.md) when populating `type`, `reason`, and `message` fields. These fields are exposed to external consumers via mapped conditions and MUST NOT contain:
 - Internal service URLs or IP addresses
@@ -371,14 +385,14 @@ ClusterHealthy:  # Map key is the output condition type
 ```yaml
 GCPQuotaDetails:  # Map key is the output condition type
   when:
-    expression: statuses.exists(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable" && has(c.data.quotaRemaining))
+    expression: statuses.exists(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable" && c.?data.?quotaRemaining.hasValue())
   output:
     status:
-      expression: statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining > 10 ? "True" : "False"
+      expression: statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].?data.?quotaRemaining.orValue(0) > 10 ? "True" : "False"
     reason:
-      expression: statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining > 10 ? "SufficientQuota" : "LowQuota"
+      expression: statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].?data.?quotaRemaining.orValue(0) > 10 ? "SufficientQuota" : "LowQuota"
     message:
-      expression: '"GCP quota remaining: " + string(statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].data.quotaRemaining)'
+      expression: '"GCP quota remaining: " + string(statuses.filter(c, c.adapter == "gcp-adapter" && c.type == "QuotaAvailable")[0].?data.?quotaRemaining.orValue(0))'
 ```
 
 **Input** (adapter condition from gcp-adapter with `data` field):
@@ -391,7 +405,7 @@ GCPQuotaDetails:  # Map key is the output condition type
 {"type": "GCPQuotaDetails", "status": "True", "reason": "SufficientQuota", "message": "GCP quota remaining: 25", "observed_generation": 5, "last_transition_time": "2026-05-19T10:32:00Z"}
 ```
 
-**Security Note**: This example shows selective extraction — the CEL expression extracts only `quotaRemaining` (customer-visible) and ignores `internalProjectId` (sensitive). Operators must use `has(c.data.field)` guards to prevent errors when fields are missing and carefully review which `data` fields are exposed.
+**Security Note**: This example shows selective extraction using safe navigation — the CEL expression `c.?data.?quotaRemaining.hasValue()` safely checks field presence and `orValue(0)` provides a safe default. This extracts only `quotaRemaining` (customer-visible) and ignores `internalProjectId` (sensitive). Operators must use the safe navigation pattern (`c.?data.?field.hasValue()` / `orValue(default)`) to prevent errors when fields are missing and carefully review which `data` fields are exposed.
 
 ---
 
