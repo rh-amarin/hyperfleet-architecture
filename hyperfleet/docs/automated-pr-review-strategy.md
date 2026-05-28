@@ -114,7 +114,7 @@ For local developer workflows, the CLI is useful for quick pre-push reviews but 
 | Doc-Code cross-referencing | If PR modifies a design doc, checks code implements every claim (and vice versa) |
 | HyperFleet standards enforcement | Checks against specific coding standards (commit format, error model, logging, etc.) |
 | Intra-PR consistency | Detects when a PR uses different patterns for the same concern |
-| 10 mechanical check groups | Error handling, concurrency, exhaustiveness, resource lifecycle, code quality, testing, naming, security, hygiene, performance |
+| 10 mechanical check groups | Error handling, concurrency, exhaustiveness, resource lifecycle, code quality, testing, naming, security, hygiene, performance — see [Code Review Standards](../standards/code-review/README.md) |
 | Interactive fix application | In self-review mode, can apply fixes directly using Edit/Write tools |
 | CodeRabbit deduplication | Reads existing CodeRabbit comments and avoids duplicating findings |
 
