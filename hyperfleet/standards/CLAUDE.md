@@ -42,6 +42,17 @@ Reference these when working with standards (non-exhaustive - see `hyperfleet/st
 | `metrics.md` | Prometheus metrics |
 | `ticket-hygiene.md` | JIRA ticket field requirements and sprint readiness |
 | `tracing.md` | Distributed tracing |
+| `code-review/README.md` | Code review standards index and severity principle |
+| `code-review/error-handling.md` | Code review: error checking, wrapping, HTTP handler returns (Go) |
+| `code-review/concurrency.md` | Code review: shared state, goroutine lifecycle, loop capture (Go) |
+| `code-review/exhaustiveness.md` | Code review: switch/select completeness, nil/bounds guards (Go) |
+| `code-review/resource-lifecycle.md` | Code review: resource cleanup, context propagation, timers (Go) |
+| `code-review/code-quality.md` | Code review: constants, struct init, function complexity (Go) |
+| `code-review/testing.md` | Code review: test coverage, structure, isolation (Go) |
+| `code-review/naming.md` | Code review: Go naming conventions (stuttering, acronyms, getters) |
+| `code-review/performance.md` | Code review: preallocation, defer in loops, N+1 queries (Go) |
+| `code-review/security.md` | Code review: injection, secrets, path traversal (all languages) |
+| `code-review/code-hygiene.md` | Code review: TODOs, log levels, typos (all languages) |
 
 ## RFC 2119 Language
 
