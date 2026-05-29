@@ -1,7 +1,7 @@
 ---
 Status: Active
 Owner: HyperFleet Platform Team
-Last Updated: 2026-05-27
+Last Updated: 2026-05-29
 ---
 
 # Code Review: Error Handling
@@ -42,13 +42,17 @@ If an error is intentionally ignored, the code MUST use an explicit blank identi
 _ = resp.Body.Close() // best-effort cleanup; error already logged by HTTP client
 ```
 
+**Exception — read-only defer close:** `defer` close calls on read-only resources (e.g., `resp.Body.Close()`, `rows.Close()`) where the error is not actionable MAY use bare `defer` without a blank identifier or comment. This is idiomatic Go for read-only cleanup.
+
 ### ERR-02: Log-and-continue vs return
 
 When an error is logged and execution continues (no `return`), the code MUST be intentional graceful degradation, not a missing `return`. Reviewers SHOULD flag log-and-continue patterns that lack an explicit comment or structural signal (e.g., `continue` in a loop) explaining why the error is non-fatal.
 
 ### ERR-03: HTTP handler missing return after error
 
-Every call to `http.Error()`, `w.WriteHeader(<4xx or 5xx>)`, or error-response helpers MUST be followed by a `return` statement. Missing `return` after an error response causes the handler to continue writing to a response that has already been committed.
+Every call to `http.Error()`, `w.WriteHeader(<4xx or 5xx>)`, or any framework/project-specific error-response helper that writes an HTTP error status MUST be followed by a `return` statement. Missing `return` after an error response causes the handler to continue writing to a response that has already been committed.
+
+The exact function names depend on the project's handler framework (e.g., gorilla/mux middleware, custom response helpers). Reviewers SHOULD check for missing `return` after ANY error-response write, regardless of the function name.
 
 Calls to `w.WriteHeader()` with 1xx, 2xx, or 3xx status codes (e.g., `http.StatusCreated`) MUST NOT be flagged — these are valid non-error responses that may be followed by a response body write.
 
@@ -119,7 +123,10 @@ defer func() {
     }
 }()
 
-// ❌ Bad — close error silently discarded without justification
+// ✅ Good — read-only cleanup, error not actionable
+defer resp.Body.Close()
+
+// ❌ Bad — close error silently discarded on writable resource
 defer file.Close()
 ```
 
