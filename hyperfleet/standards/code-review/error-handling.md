@@ -42,7 +42,7 @@ If an error is intentionally ignored, the code MUST use an explicit blank identi
 _ = resp.Body.Close() // best-effort cleanup; error already logged by HTTP client
 ```
 
-**Exception — read-only defer close:** `defer` close calls on read-only resources (e.g., `resp.Body.Close()`, `rows.Close()`) where the error is not actionable MAY use bare `defer` without a blank identifier or comment. This is idiomatic Go for read-only cleanup.
+**Exception — non-actionable defer close:** when a close error cannot indicate lost data — i.e. the resource was only read from, with nothing buffered for writing (e.g. `resp.Body.Close()`, `rows.Close()`, a file opened read-only) — bare `defer` close MAY be used without a blank identifier or comment. This is idiomatic Go. When the resource was written to and close may flush (e.g. a file opened for writing, a DB handle), the close error MUST be handled, as it can signal data loss.
 
 ### ERR-02: Log-and-continue vs return
 
@@ -126,7 +126,7 @@ defer func() {
 // ✅ Good — read-only cleanup, error not actionable
 defer resp.Body.Close()
 
-// ❌ Bad — close error silently discarded on writable resource
+// ❌ Bad — writable resource, close may flush — error signals data loss
 defer file.Close()
 ```
 
