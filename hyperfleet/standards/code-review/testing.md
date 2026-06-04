@@ -1,7 +1,7 @@
 ---
 Status: Active
 Owner: HyperFleet Platform Team
-Last Updated: 2026-05-27
+Last Updated: 2026-05-29
 ---
 
 # Code Review: Testing
@@ -68,7 +68,7 @@ Tests that create resources MUST clean up after themselves:
 Exceptions:
 
 - Tests already using `t.Cleanup()` or `defer` for resource management.
-- Clearly marked integration test files with expected external dependencies.
+- Clearly marked integration test files — by directory placement (`test/integration/`) and optionally by build tag (`//go:build integration`) — with expected external dependencies.
 
 ---
 
@@ -145,6 +145,8 @@ func TestConfigFromEnv(t *testing.T) {
 Enforced via the [three-layer review model](../../docs/automated-pr-review-strategy.md).
 
 Test coverage is measured in CI but there is no hard coverage gate — reviewers use judgment. Integration tests use [Testcontainers](https://testcontainers.com/) per ADR-0011.
+
+All HyperFleet repos place integration tests under `test/integration/`. Some repos additionally use `//go:build integration` build tags (e.g., hyperfleet-sentinel: `-tags=integration ./test/integration/...`). Both patterns are valid — directory-only or directory-plus-build-tag. Reviewers MUST NOT flag one approach as incorrect when the project consistently uses the other.
 
 ---
 

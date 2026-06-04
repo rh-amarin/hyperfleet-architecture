@@ -1,7 +1,7 @@
 ---
 Status: Active
 Owner: HyperFleet Platform Team
-Last Updated: 2026-05-27
+Last Updated: 2026-05-29
 ---
 
 # Code Review: Concurrency
@@ -56,9 +56,9 @@ Reviewers SHOULD verify:
 
 ### CONC-03: Loop variable capture
 
-Every `for` loop that launches a goroutine (`go func()`) or creates a closure MUST either pass the loop variable as a function argument or rebind it with a local copy.
+**Go 1.22+ projects:** This check does not apply. Go 1.22 introduced per-iteration loop variable scoping, which eliminates this class of bug. Reviewers MUST check the project's `go.mod` minimum Go version before flagging.
 
-**Note:** Go 1.22+ uses per-iteration scoping, which fixes this issue. Reviewers SHOULD check the project's `go.mod` minimum Go version before flagging. If `go 1.22` or later, this check does not apply.
+**Pre-Go 1.22 projects:** Every `for` loop that launches a goroutine (`go func()`) or creates a closure MUST either pass the loop variable as a function argument or rebind it with a local copy.
 
 ### Exceptions
 
