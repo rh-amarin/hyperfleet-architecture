@@ -1,7 +1,7 @@
 ---
 Status: Active
 Owner: HyperFleet Platform Team
-Last Updated: 2025-12-09
+Last Updated: 2026-06-08
 ---
 
 # HyperFleet Repository Creation Guidelines
@@ -17,8 +17,8 @@ This document outlines the mandatory configuration steps and conventions for cre
 2. Branch Protection Configuration
 3. Team Access Configuration
 
-**Purpose**: Standardized conventions for creating and configuring new repositories in the HyperFleet project.  
-**Note**: This document provides the MVP baseline. More conventions will be introduced and refined after the MVP phase. 
+**Purpose**: Standardized conventions for creating and configuring new repositories in the HyperFleet project.
+**Note**: This document provides the MVP baseline. More conventions will be introduced and refined after the MVP phase.
 ---
 
 ## Repository Naming and Initialization
@@ -41,7 +41,7 @@ Navigate to: **Settings → Branches → New branch ruleset**
 - Ruleset Name: e.g., `main`
 - Enforcement status: **Active**
 - Target branches: Add target -> Include default branch
-- Branch rules 
+- Branch rules
   - Require a pull request before merging
     - Required approvals: 1
   - Require status checks to pass before merging
@@ -71,8 +71,9 @@ All HyperFleet repositories **MUST** be configured with the following team acces
 ---
 
 ## CICD Jobs for Repository
-- If a presubmit job or image build job is required, please create the corresponding JIRA tickets to request the setup.   
+- If a presubmit job or image build job is required, please create the corresponding JIRA tickets to request the setup.
 - For reference, you may refer to similar tickets such as HYPERFLEET-135, HYPERFLEET-134.
+- To configure your repository for testing and merge automation (Prow, OpenShift CI, robot access), follow the [Onboarding a New Component for Testing and Merge Automation](release/test-release/onboarding-a-new-component-for-testing-and-merge-automation.md) guide.
 
 ---
 
